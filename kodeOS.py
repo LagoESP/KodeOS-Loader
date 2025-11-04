@@ -1,24 +1,24 @@
 #!/usr/bin/env python3
 """
-kodeOS Loader – GUI to flash ESP32-S3 builds with progress bar
-Rounded orange "Load" button, rounded progress bar.
+kodeOS Loader – GUI to flash ESP32-S3 builds
+Rounded orange "Load" button.
 Requirements:
   python3 -m pip install pyserial esptool Pillow
 """
 import json
 import subprocess
 import sys
-import io # Para capturar salida de esptool
+import io # To capture esptool output
 try:
     from PIL import Image, ImageChops, ImageTk
     PIL_AVAILABLE = True
 except ImportError:
     PIL_AVAILABLE = False
 
-import esptool # Para llamar directamente
+import esptool # To call directly
 
 # --- OPTIMIZED FOR PILLOW > 10 ---
-# Con Pillow > 10, solo usamos la API moderna.
+# With Pillow > 10, we only use the modern API.
 if PIL_AVAILABLE:
     RESAMPLE_FILTER = Image.Resampling.LANCZOS
 else:
@@ -33,21 +33,22 @@ from tkinter import filedialog, messagebox
 from serial.tools import list_ports
 
 BAUD_RATE = 460800
-# Paleta de colores con naranja y gris originales
-BG = "#E1E1E1"            # Fondo gris claro original
-ACCENT = "#FF7F1F"        # Naranja original
-ACCENT_HOVER = "#FFB184"  # Naranjo claro para hover
-TEXT_DARK = "#222222"     # Texto oscuro original
-TEXT_LIGHT = "#FFFFFF"    # Texto claro/blanco
-GRAY_LIGHT = "#CCCCCC"    # Gris claro ligeramente más oscuro para destacar la barra de progreso
-GRAY_MID = "#888888"      # Gris medio para texto secundario
+# Original color palette with orange and gray
+BG = "#E1E1E1"            # Original light gray background
+ACCENT = "#FF7F1F"        # Original orange
+ACCENT_HOVER = "#FFB184"  # Light orange for hover
+TEXT_DARK = "#222222"     # Original dark text
+TEXT_LIGHT = "#FFFFFF"    # Light/white text
+GRAY_LIGHT = "#CCCCCC"    # Slightly darker light gray for progress bar trough
+GRAY_MID = "#888888"      # Medium gray for secondary text
 
-# Colores para notificaciones
-COLOR_SUCCESS = "#28A745" # Verde
-COLOR_ERROR = "#DC3545"   # Rojo
+# Notification colors
+COLOR_SUCCESS = "#28A745" # Green
+COLOR_ERROR = "#DC3545"   # Red
+COLOR_ERROR_HOVER = "#E4606D" # Lighter red for hover
 COLOR_INFO = TEXT_DARK    # Normal
 
-# Tipografía mejorada (usando fuentes que suelen estar disponibles en sistemas)
+# Improved typography (using fonts commonly available on systems)
 FONT = ("Segoe UI", 11)
 FONT_BOLD = ("Segoe UI", 12, "bold")
 TITLE_FONT = ("Segoe UI", 16, "bold")
@@ -60,17 +61,27 @@ LANGUAGES = {
         'firmware_label': "Firmware (.bin):",
         'refresh_button': "Refresh",
         'browse_button': "Browse",
-        'load_button': "Load",
-        'load_button_loading': "Loading...",
+        'load_button': "Flash",
+        'load_button_loading': "Flashing...",
+        'erase_button': "Erase",
+        'erase_button_erasing': "Erasing...",
         'ports_loading': "Loading ports...",
-        'no_ports_found': "No ports found",
+        'no_ports_found': "No USB ports found",
         'browse_dialog_title': "Select firmware .bin",
         'status_ready': "Ready to load",
         'status_starting': "Starting flash...",
+        'status_erasing': "Erasing flash...",
         'flashing_progress': "Flashing ({pct}%)...",
         'error_missing_params': "Select serial port and firmware .bin file.",
+        'error_missing_port': "Please select a serial port.",
         'flash_success': "Flash completed successfully.",
-        'flash_error_generic': "Error during flash. Check logs and retry."
+        'flash_error_generic': "Error during flash. Check logs and retry.",
+        'erase_success': "Flash erased successfully.",
+        'erase_error': "Error during erase. Check logs.",
+        'erase_confirm_title': "Confirm Erase",
+        'erase_confirm_message': "This will ERASE THE ENTIRE FLASH on the device!\nThis cannot be undone.\n\nAre you sure?",
+        'show_logs_label': "Show Logs",
+        'hide_logs_label': "Hide Logs"
     },
     'es': {
         'window_title': "Cargador kodeOS",
@@ -80,15 +91,25 @@ LANGUAGES = {
         'browse_button': "Buscar",
         'load_button': "Cargar",
         'load_button_loading': "Cargando...",
+        'erase_button': "Borrar",
+        'erase_button_erasing': "Borrando...",
         'ports_loading': "Buscando puertos...",
-        'no_ports_found': "No se encontraron puertos",
+        'no_ports_found': "No se encontraron puertos USB",
         'browse_dialog_title': "Seleccionar firmware .bin",
         'status_ready': "Listo para cargar",
         'status_starting': "Iniciando flasheo...",
+        'status_erasing': "Borrando flash...",
         'flashing_progress': "Flasheando ({pct}%)...",
         'error_missing_params': "Seleccione un puerto serial y un archivo .bin.",
+        'error_missing_port': "Por favor, seleccione un puerto serial.",
         'flash_success': "Flasheo completado con éxito.",
-        'flash_error_generic': "Error durante el flasheo. Revise los logs e intente de nuevo."
+        'flash_error_generic': "Error durante el flasheo. Revise los logs e intente de nuevo.",
+        'erase_success': "Flash borrada con éxito.",
+        'erase_error': "Error durante el borrado. Revise los logs.",
+        'erase_confirm_title': "Confirmar Borrado",
+        'erase_confirm_message': "¡Esto BORRARÁ TODA LA FLASH del dispositivo!\nEsta acción no se puede deshacer.\n\n¿Está seguro?",
+        'show_logs_label': "Mostrar Logs",
+        'hide_logs_label': "Ocultar Logs"
     }
 }
 
@@ -101,7 +122,7 @@ class RoundedButton(tk.Canvas):
         self.radius = radius
         self.command = command
         self.active_bg = active_bg
-        self._orig_bg = bg    # Guardar color original
+        self._orig_bg = bg    # Save original color
         self.normal_bg = bg
         self.text = text
         self.fg = fg
@@ -125,11 +146,11 @@ class RoundedButton(tk.Canvas):
         height = self.winfo_reqheight() or 2*r
         self.configure(width=width, height=height)
         
-        # Crear sombra sutil
+        # Subtle shadow
         self.create_round_rect(3, 3, width, height, r, fill="#E0E0E0", outline="")
-        # Crear botón principal
+        # Main button
         self.create_round_rect(0, 0, width-3, height-3, r, fill=fill, outline="")
-        # Texto del botón
+        # Button text
         self.create_text(width//2-1, height//2-1, text=self.text, fill=self.fg,
                          font=FONT_BOLD, tags="label")
 
@@ -166,99 +187,53 @@ class RoundedButton(tk.Canvas):
 
     def set_text(self, text):
         self.text = text
-        self.itemconfigure("label", text=text) # Más eficiente que _draw()
+        self.itemconfigure("label", text=text) # More efficient than _draw()
 
     def set_disabled(self, disabled=True):
         self.state_disabled = disabled
-        fill = GRAY_MID if disabled else self.fg
-        # Restaurar color original al activar, y gris claro al desactivar
+        # Use text color GRAY_MID for disabled state, but keep TEXT_LIGHT for red button
+        text_fill = GRAY_MID if disabled and self._orig_bg != COLOR_ERROR else self.fg
+        
+        # Restore original color on activate, light gray on deactivate
         if disabled:
             self.normal_bg = GRAY_LIGHT
         else:
             self.normal_bg = self._orig_bg
-        self.itemconfigure("label", fill=fill)
+        self.itemconfigure("label", fill=text_fill)
         self._draw(normal=True)
-
-class RoundedProgress(tk.Canvas):
-    def __init__(self, parent, width=400, height=20, bg=GRAY_LIGHT, fg=ACCENT, radius=10, **kwargs):
-        tk.Canvas.__init__(self, parent, width=width, height=height, bg=BG,
-                            highlightthickness=0, **kwargs)
-        self.radius = radius
-        self.fg = fg
-        self.bg_color = bg
-        self._pct = 0
-        self._draw(0)
-
-    def _draw(self, pct):
-        self.delete("all")
-        w = int(self['width']); h = int(self['height']); r = self.radius
-        
-        # Sombra sutil
-        self.create_round_rect(2, 2, w, h, r, fill="#E5E5E5", outline="")
-        
-        # Fondo de la barra (trough)
-        self.create_round_rect(0, 0, w-2, h-2, r, fill=self.bg_color, outline="")
-        
-        # Barra de progreso
-        bar_w = max(r, int((w-2) * pct / 100))
-        if bar_w > r * 2:  # Solo dibujar si hay suficiente progreso
-            self.create_round_rect(0, 0, bar_w, h-2, r, fill=self.fg, outline="")
-            
-        # Texto de porcentaje
-        if pct > 0:
-            self.create_text(w//2, h//2, text=f"{int(pct)}%", 
-                             fill=TEXT_LIGHT if pct > 50 else TEXT_DARK,
-                             font=("Segoe UI", 9, "bold"))
-
-    def create_round_rect(self, x1, y1, x2, y2, r, **kwargs):
-        points = [x1+r, y1,
-                  x2-r, y1,
-                  x2, y1,
-                  x2, y1+r,
-                  x2, y2-r,
-                  x2, y2,
-                  x2-r, y2,
-                  x1+r, y2,
-                  x1, y2,
-                  x1, y2-r,
-                  x1, y1+r,
-                  x1, y1]
-        return self.create_polygon(points, smooth=True, **kwargs)
-
-    def set_pct(self, pct):
-        self._pct = max(0, min(100, pct))
-        self._draw(self._pct)
-
-    def reset(self):
-        self.set_pct(0)
 
 # ──────────────────────────  Main Application  ──────────────────────────
 class LoaderApp(tk.Tk):
     def __init__(self):
         super().__init__()
         
-        # --- Configuración de idioma ---
-        self.lang = 'en' # Idioma de inicio
+        # --- Language configuration ---
+        self.lang = 'en' # Start language
         self.current_notification = None # (message_key, level)
-        # --- Fin Configuración de idioma ---
+        # --- End Language configuration ---
         
         self.title(self.get_string('window_title'))
         self.iconbitmap("icon.ico")
-        self.configure(bg=BG)  # ventana de fondo gris
+        self.configure(bg=BG)  # gray background window
         self.resizable(False, False)
-        # Cargar iconos y recursos
+        
+        # --- Collapsible log state (REMOVED) ---
+        # self.logs_visible = False
+        
+        # Load icons and resources
         self._load_resources()
         self._build_ui()
-        # Centrar ventana principal en pantalla
+        
+        # Center the main window on the screen
         self._center_window()
         
-    # --- Métodos de Idioma ---
+    # --- Language Methods ---
     def get_string(self, key):
-        """Obtiene la cadena de texto para el idioma actual."""
+        """Gets the text string for the current language."""
         return LANGUAGES.get(self.lang, LANGUAGES['en']).get(key, f"<{key}>")
 
     def _set_language(self, lang):
-        """Establece el nuevo idioma y actualiza la UI."""
+        """Sets the new language and updates the UI."""
         if lang not in LANGUAGES or lang == self.lang:
             return
         self.lang = lang
@@ -266,7 +241,7 @@ class LoaderApp(tk.Tk):
         self._update_lang_switcher_ui()
 
     def _update_lang_switcher_ui(self):
-        """Actualiza el resaltado del selector de idioma."""
+        """Updates the language switcher highlight."""
         if self.lang == 'en':
             self.en_label.config(font=FONT_BOLD, fg=ACCENT)
             self.es_label.config(font=FONT, fg=GRAY_MID)
@@ -275,54 +250,60 @@ class LoaderApp(tk.Tk):
             self.es_label.config(font=FONT_BOLD, fg=ACCENT)
             
     def _update_ui_text(self):
-        """Actualiza todos los widgets de texto con el idioma actual."""
+        """Updates all text widgets with the current language."""
         self.title(self.get_string('window_title'))
         self.serial_label.config(text=self.get_string('serial_port_label'))
         self.firmware_label.config(text=self.get_string('firmware_label'))
         self.refresh_btn.set_text(self.get_string('refresh_button'))
         self.browse_btn.set_text(self.get_string('browse_button'))
         
-        # Solo actualizar botón de carga si no está deshabilitado
+        # Update log toggle label (REMOVED)
+        
+        # Only update load button if it's not disabled
         if not self.load_btn.state_disabled:
             self.load_btn.set_text(self.get_string('load_button'))
         
-        # Actualizar lista de puertos (esto actualizará "No ports found" si es necesario)
+        # Add update for erase button
+        if not self.erase_btn.state_disabled:
+            self.erase_btn.set_text(self.get_string('erase_button'))
+        
+        # Refresh port list (this will update "No ports found" if necessary)
         self._refresh_ports() 
         
-        # Volver a mostrar la notificación/estado actual en el nuevo idioma
+        # Re-show the current notification/status in the new language
         if self.current_notification:
             key, level = self.current_notification
-            # Si el progreso está activo, el hilo lo sobrescribirá, así que no hacemos nada
-            if key.startswith('flashing_progress'):
+            # If progress is active, the thread will overwrite it, so we do nothing
+            if key.startswith('flashing_progress') or key.startswith('status_erasing'):
                 pass
             else:
                 self._show_notification(key, level)
         elif not self.load_btn.state_disabled:
-            # Mostrar estado 'Ready'
+            # Show 'Ready' status
             self.result_label.config(text=self.get_string('status_ready'), fg=COLOR_INFO, image="")
         
-        # Actualizar valor de port_var si es un mensaje de estado
+        # Update port_var value if it's a status message
         current_port = self.port_var.get()
         if current_port in [LANGUAGES['en']['no_ports_found'], LANGUAGES['es']['no_ports_found']]:
             self.port_var.set(self.get_string('no_ports_found'))
         elif current_port in [LANGUAGES['en']['ports_loading'], LANGUAGES['es']['ports_loading']]:
              self.port_var.set(self.get_string('ports_loading'))
 
-    # --- Fin Métodos de Idioma ---
+    # --- End Language Methods ---
 
     # --- OPTIMIZED FOR PILLOW > 10 ---
     def _load_resources(self):
-        # Preparar para futuros iconos si se necesitan
+        # Prepare for future icons if needed
         self.icons = {}
         
-        # --- Cargar Logo ---
+        # --- Load Logo ---
         self.logo_img = None
         logo_path = pathlib.Path(__file__).resolve().parent / "images" / "logo.png"
         if logo_path.is_file():
             try:
                 if PIL_AVAILABLE:
                     with Image.open(str(logo_path)) as pil_img: # 1. Open
-                        # Color de fondo asumido en esquina superior izquierda
+                        # Assumed background color in top-left corner
                         bg_color = pil_img.getpixel((0, 0))
                         diff = ImageChops.difference(pil_img, Image.new(pil_img.mode, pil_img.size, bg_color))
                         bbox = diff.getbbox()
@@ -336,7 +317,7 @@ class LoaderApp(tk.Tk):
                     pil_img.thumbnail((max_dim, max_dim), RESAMPLE_FILTER) # 5. Resize in-place
                     self.logo_img = ImageTk.PhotoImage(pil_img) # 6. Create Tk image
                 
-                else: # Fallback sin PIL
+                else: # Fallback without PIL
                     img = tk.PhotoImage(file=str(logo_path))
                     max_dim = 100
                     if img.width() > max_dim or img.height() > max_dim:
@@ -344,10 +325,10 @@ class LoaderApp(tk.Tk):
                         img = img.subsample(factor, factor)
                     self.logo_img = img
             except Exception as e:
-                print(f"Error loading logo: {e}") # Añadido para depuración
+                print(f"Error loading logo: {e}") # Added for debugging
                 self.logo_img = None
 
-        # --- Cargar Pet ---
+        # --- Load Pet ---
         self.pet_img = None
         pet_path = pathlib.Path(__file__).resolve().parent / "images" / "pet.png"
         if pet_path.is_file():
@@ -359,18 +340,18 @@ class LoaderApp(tk.Tk):
                     max_pet_dim = 140
                     pil_pet.thumbnail((max_pet_dim, max_pet_dim), RESAMPLE_FILTER) # Resize in-place
                     self.pet_img = ImageTk.PhotoImage(pil_pet)
-                else: # Fallback sin PIL
+                else: # Fallback without PIL
                     pet = tk.PhotoImage(file=str(pet_path))
                     max_pet_dim = 140
                     factor = max(1, max(pet.width()//max_pet_dim, pet.height()//max_pet_dim))
                     pet = pet.subsample(factor, factor)
                     self.pet_img = pet
             except Exception as e:
-                print(f"Error loading pet: {e}") # Añadido para depuración
+                print(f"Error loading pet: {e}") # Added for debugging
                 self.pet_img = None
 
-        # --- Cargar Iconos de Resultado ---
-        icon_dim = 32 # Tamaño para icono de notificación
+        # --- Load Result Icons ---
+        icon_dim = 32 # Size for notification icon
         self.icon_success = None
         self.icon_error = None
         
@@ -382,13 +363,13 @@ class LoaderApp(tk.Tk):
                         pil_succ.load()
                     pil_succ.thumbnail((icon_dim, icon_dim), RESAMPLE_FILTER)
                     self.icon_success = ImageTk.PhotoImage(pil_succ)
-                else: # Fallback sin PIL
+                else: # Fallback without PIL
                     img = tk.PhotoImage(file=str(success_path))
                     w,h = img.width(), img.height()
                     factor = max(1, max(w//icon_dim, h//icon_dim))
                     self.icon_success = img.subsample(factor, factor)
             except Exception as e:
-                print(f"Error loading success icon: {e}") # Añadido para depuración
+                print(f"Error loading success icon: {e}") # Added for debugging
 
         fail_path = pathlib.Path(__file__).resolve().parent / "images" / "fail.png"
         if fail_path.is_file():
@@ -398,50 +379,55 @@ class LoaderApp(tk.Tk):
                         pil_fail.load()
                     pil_fail.thumbnail((icon_dim, icon_dim), RESAMPLE_FILTER)
                     self.icon_error = ImageTk.PhotoImage(pil_fail)
-                else: # Fallback sin PIL
+                else: # Fallback without PIL
                     img = tk.PhotoImage(file=str(fail_path))
                     w,h = img.width(), img.height()
                     factor = max(1, max(w//icon_dim, h//icon_dim))
                     self.icon_error = img.subsample(factor, factor)
             except Exception as e:
-                print(f"Error loading fail icon: {e}") # Añadido para depuración
+                print(f"Error loading fail icon: {e}") # Added for debugging
     # --- END OPTIMIZATION ---
 
     # UI -----------------------------------------------------------------
     def _build_ui(self):
-        # Usar grid para layout compacto con margen
+        # Use grid for a compact layout with margins
         self.configure(padx=15, pady=15)
-        # Frame izquierdo para logo y pet
+        
+        # --- FIX: Changed rowspan to 4 ---
+        # Left frame for logo and pet
         left_frame = tk.Frame(self, bg=BG)
-        left_frame.grid(row=0, column=0, rowspan=5, sticky="nw", padx=(0,4), pady=0)
-        # Mostrar logo si existe
+        left_frame.grid(row=0, column=0, rowspan=4, sticky="nw", padx=(0,4), pady=0)
+        # Show logo if it exists
         if getattr(self, 'logo_img', None):
-            # Logo pequeño, sin padding extra
+            # Small logo, no extra padding
             tk.Label(left_frame, image=self.logo_img, bg=BG).pack(pady=(0,0))
-        # Mostrar mascota pet debajo
+        # Show pet below
         if getattr(self, 'pet_img', None):
-            # Mascota más grande, pegada al logo
+            # Larger pet, close to the logo
             tk.Label(left_frame, image=self.pet_img, bg=BG).pack(pady=(0,0))
         
-        # Variables y constantes de entrada
+        # Input variables and constants
         INPUT_HEIGHT = 28
-        LOGO_SIZE = 120  # Tamaño máximo para el logo
+        LOGO_SIZE = 120  # Max size for the logo
         
-        # Quitar expansión de columnas
-        for i in range(4):
-            self.columnconfigure(i, weight=0)
+        # --- Configure column expansion ---
+        # Allow column 2 (inputs) to expand
+        self.columnconfigure(0, weight=0) # Column 0: Image
+        self.columnconfigure(1, weight=0) # Column 1: Labels
+        self.columnconfigure(2, weight=1) # Column 2: Inputs (Expand)
+        self.columnconfigure(3, weight=0) # Column 3: Buttons
         
-        # Reducir espacio entre filas
+        # Reduce space between rows
         for i in range(4):
             self.rowconfigure(i, pad=1)
         
-        # FILA 0: Serial Port
-        # Etiqueta Serial Port
+        # ROW 0: Serial Port
+        # Serial Port Label
         LABEL_FONT = ("Segoe UI", 12, "bold")
         self.serial_label = tk.Label(self, text=self.get_string('serial_port_label'), bg=BG, fg=TEXT_DARK, font=LABEL_FONT)
         self.serial_label.grid(row=0, column=1, sticky="e", padx=(0,4), pady=0)
         
-        # Variable y combobox
+        # Variable and combobox
         self.port_var = tk.StringVar()
         initial_port_value = self.get_string('ports_loading')
         self.port_var.set(initial_port_value)
@@ -450,8 +436,9 @@ class LoaderApp(tk.Tk):
         self.port_combo.config(font=FONT, bg=BG, fg=TEXT_DARK, 
                                activebackground=ACCENT, activeforeground=TEXT_LIGHT,
                                highlightthickness=1, highlightbackground=GRAY_LIGHT, bd=0)
-        self.port_combo.grid(row=0, column=2, sticky="w")
-        # Mantener color de texto oscuro tras selección
+        # Use sticky="ew" to fill column
+        self.port_combo.grid(row=0, column=2, sticky="ew")
+        # Keep dark text color after selection
         self.port_var.trace_add('write', lambda *args: self.port_combo.config(fg=TEXT_DARK))
         
         # Refresh button
@@ -460,17 +447,19 @@ class LoaderApp(tk.Tk):
                                       active_bg=ACCENT_HOVER)
         self.refresh_btn.grid(row=0, column=3, padx=(2,0), pady=0)
         
-        # FILA 1: Build Folder
+        # ROW 1: Build Folder
         self.firmware_label = tk.Label(self, text=self.get_string('firmware_label'), bg=BG, fg=TEXT_DARK, font=LABEL_FONT)
         self.firmware_label.grid(row=1, column=1, sticky="e", padx=(0,4), pady=0)
         
-        # Entry para build folder
+        # Entry for build folder
         self.build_var = tk.StringVar()
         self.build_entry = tk.Entry(self, textvariable=self.build_var, 
                                   font=FONT, bg=BG, fg=TEXT_DARK, 
                                   relief=tk.FLAT, highlightthickness=1, 
-                                  highlightbackground=GRAY_LIGHT)
-        self.build_entry.grid(row=1, column=2, sticky="w", padx=0, pady=0)
+                                  highlightbackground=GRAY_LIGHT,
+                                  width=30) # Set a minimum width
+        # Use sticky="ew" to fill column
+        self.build_entry.grid(row=1, column=2, sticky="ew", padx=0, pady=0)
 
         # Browse button
         self.browse_btn = RoundedButton(self, text=self.get_string('browse_button'), command=self._browse,
@@ -478,58 +467,60 @@ class LoaderApp(tk.Tk):
                                       active_bg=ACCENT_HOVER)
         self.browse_btn.grid(row=1, column=3, padx=(2,0), pady=0)
 
-        # FILA 2: Progress Bar
-        bar_frame = tk.Frame(self, bg=BG)
-        bar_frame.grid(row=2, column=1, columnspan=3, sticky="w", padx=0, pady=(2,0))
-        
-        bar_height = 26
-        self.progress = RoundedProgress(bar_frame, width=380, height=bar_height, 
-                                      bg=GRAY_LIGHT, fg=ACCENT, radius=bar_height//2)
-        self.progress.grid(row=0, column=0, sticky="w", padx=0, pady=0)
-        
-        # FILA 3: LOAD button
+        # --- ROW 2: LOAD and ERASE buttons (Progress Bar removed) ---
         button_frame = tk.Frame(self, bg=BG)
-        button_frame.grid(row=3, column=1, columnspan=3, pady=(2,0))
-        button_frame.grid_columnconfigure(0, weight=1)
-        # Ocultar posible espacio alrededor
-        button_frame.configure(padx=0, pady=0)
-        
-        # Botón Load
+        # Span columns 1 and 2
+        button_frame.grid(row=2, column=1, columnspan=2, pady=(10,2), sticky="ew") # Added top padding
+        button_frame.grid_columnconfigure(0, weight=1) # Left side
+        button_frame.grid_columnconfigure(1, weight=1) # Right side
+
+        # Load button (on the left)
         self.load_btn = RoundedButton(button_frame, text=self.get_string('load_button'), width=160, height=38, 
                                       command=self._start_flash, bg=ACCENT, fg=TEXT_LIGHT)
-        self.load_btn.grid(row=0, column=0, padx=0, pady=0)
+        self.load_btn.grid(row=0, column=0, padx=5, sticky='e') # Aligned to the right of its cell
+
+        # Erase button (on the right)
+        self.erase_btn = RoundedButton(button_frame, text=self.get_string('erase_button'), width=160, height=38,
+                                       command=self._start_erase, 
+                                       bg=COLOR_ERROR, # Red button
+                                       fg=TEXT_LIGHT, 
+                                       active_bg=COLOR_ERROR_HOVER) # Lighter red hover
+        self.erase_btn.grid(row=0, column=1, padx=5, sticky='w') # Aligned to the left of its cell
         
-        # FILA 4: Label para resultado/notificación (debajo del botón)
+        
+        # --- ROW 3: Label for result/notification (below the button) ---
         self.result_label = tk.Label(self, text=self.get_string('status_ready'), 
                                      bg=BG, fg=COLOR_INFO, font=FONT_BOLD, 
-                                     compound=tk.LEFT, anchor="w", justify=tk.LEFT)
-        self.result_label.grid(row=4, column=1, columnspan=3, sticky="ew", padx=0, pady=(4,0))
+                                     compound=tk.LEFT, 
+                                     anchor="center", justify=tk.CENTER) # Centered text
+        # Span columns 1 and 2
+        self.result_label.grid(row=3, column=1, columnspan=2, sticky="ew", padx=0, pady=(4,0))
 
 
-        # FILA 5: Log Area
-        log_frame = tk.Frame(self, bg=BG)
-        log_frame.grid(row=5, column=0, columnspan=4, sticky="nsew", pady=(5,0)) # Span all columns including left_frame
-        log_frame.grid_columnconfigure(0, weight=1)
-        log_frame.grid_rowconfigure(0, weight=1)
+        # --- ROW 4: Log Area (Permanent) ---
+        self.log_frame = tk.Frame(self, bg=BG)
+        self.log_frame.grid(row=4, column=0, columnspan=4, sticky="nsew", pady=(10,0))
+        self.log_frame.grid_columnconfigure(0, weight=1)
+        self.log_frame.grid_rowconfigure(0, weight=1)
 
-        self.log_text = tk.Text(log_frame, wrap=tk.WORD, state=tk.DISABLED,
+        self.log_text = tk.Text(self.log_frame, wrap=tk.WORD, state=tk.DISABLED,
                                 height=10, bg="#F0F0F0", fg=TEXT_DARK,
                                 relief=tk.FLAT, highlightthickness=1,
                                 highlightbackground=GRAY_LIGHT, font=("Courier New", 9))
         self.log_text.grid(row=0, column=0, sticky="nsew")
 
-        log_scrollbar = tk.Scrollbar(log_frame, command=self.log_text.yview)
+        log_scrollbar = tk.Scrollbar(self.log_frame, command=self.log_text.yview)
         log_scrollbar.grid(row=0, column=1, sticky="ns")
         self.log_text.config(yscrollcommand=log_scrollbar.set)
         
-        # Configurar la fila 5 para que se expanda si la ventana cambia de tamaño (aunque es fija)
-        self.rowconfigure(5, weight=1)
+        # Configure row 4 (the log's row) to expand
+        self.rowconfigure(4, weight=1)
 
-        # FILA 6: Language Switcher
+        # --- ROW 5: Language Switcher ---
         lang_frame = tk.Frame(self, bg=BG)
-        lang_frame.grid(row=6, column=0, columnspan=4, sticky="e", pady=(5,0))
+        lang_frame.grid(row=5, column=0, columnspan=4, sticky="e", pady=(5,0))
         
-        # Añadidos de derecha a izquierda
+        # Added from right to left
         self.es_label = tk.Label(lang_frame, text="Español", bg=BG, fg=GRAY_MID, font=FONT, cursor="hand2")
         self.es_label.pack(side=tk.RIGHT, padx=5)
         self.es_label.bind("<Button-1>", lambda e: self._set_language('es'))
@@ -540,13 +531,15 @@ class LoaderApp(tk.Tk):
         self.en_label.pack(side=tk.RIGHT, padx=5)
         self.en_label.bind("<Button-1>", lambda e: self._set_language('en'))
 
-        # Inicializar los puertos
+        # Initialize ports
         self._refresh_ports()
         
-    # --- Notificaciones ---
+    # --- Log Toggle Method (REMOVED) ---
+    
+    # --- Notifications ---
     def _show_notification(self, message_key, level='info'):
-        """Muestra una notificación en self.result_label."""
-        self.current_notification = (message_key, level) # Guardar la clave
+        """Shows a notification in self.result_label."""
+        self.current_notification = (message_key, level) # Save the key
         message = self.get_string(message_key)
         icon = None
         color = COLOR_INFO
@@ -561,13 +554,20 @@ class LoaderApp(tk.Tk):
         self.result_label.config(text=message, image=icon, fg=color)
 
     def _clear_notification(self):
-        """Limpia el área de notificación."""
+        """Clears the notification area."""
         self.current_notification = None
         self.result_label.config(text="", image="", fg=COLOR_INFO)
 
     # Helpers ------------------------------------------------------------
     def _list_ports(self):
-        return [p.device for p in list_ports.comports()]
+        """Gets a list of serial ports that appear to be USB."""
+        ports = list_ports.comports()
+        # Filter only ports that look like USB (have VID/PID or "USB" in their description/hwid)
+        usb_ports = [
+            p.device for p in ports 
+            if p.vid is not None or "USB" in p.hwid.upper() or "USB" in p.description.upper()
+        ]
+        return usb_ports
 
     def _refresh_ports(self):
         menu = self.port_combo['menu']
@@ -577,10 +577,10 @@ class LoaderApp(tk.Tk):
             for p in ports:
                 menu.add_command(label=p, command=lambda v=p, var=self.port_var: var.set(v))
             
-            # No sobreescribir si ya hay un puerto seleccionado
+            # Don't overwrite if a port is already selected
             current_val = self.port_var.get()
             if current_val in [self.get_string('no_ports_found'), self.get_string('ports_loading')] or current_val not in ports:
-                 self.port_var.set(ports[0]) # Seleccionar el primero
+                 self.port_var.set(ports[0]) # Select the first one
         else:
             no_ports_msg = self.get_string('no_ports_found')
             self.port_var.set(no_ports_msg)
@@ -604,6 +604,27 @@ class LoaderApp(tk.Tk):
         self.log_text.insert(tk.END, message)
         self.log_text.see(tk.END)
         self.log_text.config(state=tk.DISABLED)
+        # Automatically show logs if hidden (REMOVED)
+        # if not self.logs_visible:
+        #     self._toggle_logs()
+
+    # --- Button state management ---
+    def _set_controls_disabled(self, disabled=True):
+        """Disables or enables all interactive controls."""
+        self.load_btn.set_disabled(disabled)
+        self.erase_btn.set_disabled(disabled)
+        
+        # Also disable/enable the non-custom buttons
+        for btn in [self.refresh_btn, self.browse_btn]:
+            if btn: # Check if it exists
+                btn.set_disabled(disabled)
+        
+        # Disable standard tkinter widgets
+        combo_state = tk.DISABLED if disabled else tk.NORMAL
+        entry_state = "readonly" if disabled else tk.NORMAL # Use readonly for Entry
+        self.port_combo.config(state=combo_state)
+        self.build_entry.config(state=entry_state)
+
 
     # Flash logic --------------------------------------------------------
     def _start_flash(self):
@@ -612,52 +633,42 @@ class LoaderApp(tk.Tk):
             self._show_notification('error_missing_params', 'error')
             return
         # UI changes
-        self._clear_log_area() # Limpiar logs antes de empezar
-        self._clear_notification() # Limpiar notificación anterior
-        self.load_btn.set_text(self.get_string('load_button_loading')); self.load_btn.set_disabled(True)
-        self.progress.reset()
+        self._clear_log_area() # Clear logs before starting
+        self._clear_notification() # Clear previous notification
+        self._set_controls_disabled(True) # Disable all controls
+        self.load_btn.set_text(self.get_string('load_button_loading'))
         self._show_notification('status_starting', 'info')
         self._skip_initial_progress = True
-        self.after(0, self._update_log_area, self.get_string('status_starting') + "\n") # Log inicial
+        self.after(0, self._update_log_area, self.get_string('status_starting') + "\n") # Initial log
         threading.Thread(target=self._flash_thread, args=(build, port), daemon=True).start()
 
     def _flash_thread(self, bin_file, port):
-        args = ["--chip", "esp32s3",
+        args = ["--chip", "esp3dss",
                 "--port", port,
                 "--baud", str(BAUD_RATE),
                 "write_flash", "-z", "0x0", bin_file]
         
         all_logs = []
-        return_code = 1 # Default a error
+        return_code = 1 # Default to error
 
         self.after(0, self._update_log_area, f"Executing esptool.main with args: {args}\n")
 
-        # Streaming de logs de esptool.main y parseo de porcentaje dentro de paréntesis
+        # Stream esptool.main logs and parse percentage in parentheses
         regex = re.compile(r"\(\s*(\d{1,3})\s*%\s*\)")
         class _StreamLogger(io.StringIO):
             def write(inner_self, data):
-                # Buffer interno
+                # Internal buffer
                 super(_StreamLogger, inner_self).write(data)
-                # Enviar líneas parciales a la UI y extraer progreso, omitiendo el primer 100%
+                # Send partial lines to UI and extract progress, skipping the first 100%
                 for part in data.splitlines(True):
                     self.after(0, self._update_log_area, part)
                     m = regex.search(part)
                     if m:
                         pct = int(m.group(1))
-                        if pct < 100:
-                            # Primer progreso real o intermedio
-                            self._skip_initial_progress = False
-                            self.after(0, self.progress.set_pct, pct)
-                            # Actualizar notificación de estado
-                            msg = self.get_string('flashing_progress').format(pct=pct)
-                            self.after(0, self.result_label.config, {"text": msg, "fg": COLOR_INFO, "image": ""})
-                            self.after(0, setattr, self, 'current_notification', None) # No es una notificación final
-                        elif pct == 100 and not self._skip_initial_progress:
-                            # Solo mostrar 100% si ya hubo progreso menor
-                            self.after(0, self.progress.set_pct, pct)
-                            msg = self.get_string('flashing_progress').format(pct=pct)
-                            self.after(0, self.result_label.config, {"text": msg, "fg": COLOR_INFO, "image": ""})
-                            self.after(0, setattr, self, 'current_notification', None)
+                        # Update status notification
+                        msg = self.get_string('flashing_progress').format(pct=pct)
+                        self.after(0, self.result_label.config, {"text": msg, "fg": COLOR_INFO, "image": ""})
+                        self.after(0, setattr, self, 'current_notification', None) # Not a final notification
         
         stream_logger = _StreamLogger()
         original_stdout = sys.stdout
@@ -677,14 +688,15 @@ class LoaderApp(tk.Tk):
             sys.stdout = original_stdout
             sys.stderr = original_stderr
 
-        # Obtener logs completos y almacenarlos
+        # Get complete logs and store them
         captured_output = stream_logger.getvalue()
         all_logs.append(captured_output)
         
         self.after(0, self._flash_complete, return_code, "".join(all_logs))
 
     def _flash_complete(self, rc, logs):
-        self.load_btn.set_text(self.get_string('load_button')); self.load_btn.set_disabled(False); self.progress.reset()
+        self._set_controls_disabled(False) # Re-enable all controls
+        self.load_btn.set_text(self.get_string('load_button'))
         if rc == 0:
             self._show_notification('flash_success', 'success')
             self.after(0, self._update_log_area, f"\n{self.get_string('flash_success')}!\n")
@@ -692,15 +704,99 @@ class LoaderApp(tk.Tk):
             self._show_notification('flash_error_generic', 'error')
             self.after(0, self._update_log_area, f"\nError during flash (Return Code: {rc}). See details above.\n")
 
+    # Erase logic --------------------------------------------------------
+    def _start_erase(self):
+        port = self.port_var.get()
+        if not port or port == self.get_string('no_ports_found') or port == self.get_string('ports_loading'):
+            self._show_notification('error_missing_port', 'error')
+            return
+
+        # Show confirmation dialog
+        title = self.get_string('erase_confirm_title')
+        msg = self.get_string('erase_confirm_message')
+        if not messagebox.askyesno(title, msg, parent=self): # Set parent to self
+            return
+            
+        # UI changes
+        self._clear_log_area()
+        self._clear_notification()
+        self._set_controls_disabled(True) # Disable all controls
+        self.erase_btn.set_text(self.get_string('erase_button_erasing'))
+        self._show_notification('status_erasing', 'info')
+        self.after(0, self._update_log_area, self.get_string('status_erasing') + "\n")
+        threading.Thread(target=self._erase_thread, args=(port,), daemon=True).start()
+
+    def _erase_thread(self, port):
+        args = ["--chip", "esp32s3",
+                "--port", port,
+                "--baud", str(BAUD_RATE),
+                "erase_flash"]
+        
+        all_logs = []
+        return_code = 1 # Default to error
+
+        self.after(0, self._update_log_area, f"Executing esptool.main with args: {args}\n")
+
+        # Re-use StreamLogger; it will just pipe output without finding progress
+        regex = re.compile(r"THIS_WILL_NOT_MATCH") # No progress bar for erase
+        class _StreamLogger(io.StringIO):
+            def write(inner_self, data):
+                super(_StreamLogger, inner_self).write(data)
+                for part in data.splitlines(True):
+                    self.after(0, self._update_log_area, part)
+                    # No progress parsing needed for erase
+        
+        stream_logger = _StreamLogger()
+        original_stdout = sys.stdout
+        original_stderr = sys.stderr
+        sys.stdout = stream_logger
+        sys.stderr = stream_logger
+
+        try:
+            esptool.main(args)
+            return_code = 0
+        except SystemExit as e:
+            return_code = e.code if isinstance(e.code, int) else 1
+        except Exception as e:
+            self.after(0, self._update_log_area, f"\nException during esptool.main: {e}\n")
+            return_code = 1
+        finally:
+            sys.stdout = original_stdout
+            sys.stderr = original_stderr
+
+        captured_output = stream_logger.getvalue()
+        all_logs.append(captured_output)
+        
+        self.after(0, self._erase_complete, return_code, "".join(all_logs))
+
+    def _erase_complete(self, rc, logs):
+        self._set_controls_disabled(False) # Re-enable all controls
+        self.load_btn.set_text(self.get_string('load_button'))
+        self.erase_btn.set_text(self.get_string('erase_button'))
+        
+        if rc == 0:
+            self._show_notification('erase_success', 'success')
+            self.after(0, self._update_log_area, f"\n{self.get_string('erase_success')}!\n")
+        else:
+            self._show_notification('erase_error', 'error')
+            self.after(0, self._update_log_area, f"\nError during erase (Return Code: {rc}). See details above.\n")
+
     def _center_window(self):
-        # Centra la ventana principal en el centro de la pantalla
-        self.update_idletasks()
+        # Centers the main window on the screen
+        self.update_idletasks() # Make sure widget dimensions are calculated
+        
+        # Get final window size
         w = self.winfo_width()
         h = self.winfo_height()
+        
+        # Get screen size
         ws = self.winfo_screenwidth()
         hs = self.winfo_screenheight()
+        
+        # Calculate x, y
         x = (ws - w) // 2
         y = (hs - h) // 2
+        
         self.geometry(f"{w}x{h}+{x}+{y}")
 
 if __name__ == "__main__":
