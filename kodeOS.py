@@ -32,6 +32,19 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 from serial.tools import list_ports
 
+# --- Helper function for PyInstaller ---
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        # Note: sys._MEIPASS is a string, needs to be Path
+        base_path = pathlib.Path(sys._MEIPASS)
+    except Exception:
+        # Not in a PyInstaller bundle, so use the script's directory
+        base_path = pathlib.Path(__file__).resolve().parent
+    
+    return str(base_path / relative_path)
+
 BAUD_RATE = 460800
 # Original color palette with orange and gray
 WHITE = "#FFFFFF"         # White
@@ -70,7 +83,7 @@ LANGUAGES = {
         'ports_loading': "Loading ports...",
         'no_ports_found': "No USB ports found",
         'browse_dialog_title': "Select firmware .bin",
-        'status_ready': "Ready to flash",
+        'status_ready': "Ready to flash", # Changed
         'status_starting': "Starting flash...",
         'status_erasing': "Erasing flash...",
         'flashing_progress': "Flashing ({pct}%)...",
@@ -99,7 +112,7 @@ LANGUAGES = {
         'ports_loading': "Buscando puertos...",
         'no_ports_found': "No se encontraron puertos USB",
         'browse_dialog_title': "Seleccionar firmware .bin",
-        'status_ready': "Listo para flashear",
+        'status_ready': "Listo para flashear", # Changed
         'status_starting': "Iniciando flasheo...",
         'status_erasing': "Borrando flash...",
         'flashing_progress': "Flasheando ({pct}%)...",
@@ -216,7 +229,8 @@ class LoaderApp(tk.Tk):
         # --- End Language configuration ---
         
         self.title(self.get_string('window_title'))
-        self.iconbitmap("icon.ico")
+        # --- PYINSTALLER FIX: Use resource_path for icon ---
+        self.iconbitmap(resource_path("icon.ico"))
         self.configure(bg=BG)  # gray background window
         self.resizable(False, False)
         
@@ -297,11 +311,12 @@ class LoaderApp(tk.Tk):
         
         # --- Load Logo ---
         self.logo_img = None
-        logo_path = pathlib.Path(__file__).resolve().parent / "images" / "logo.png"
-        if logo_path.is_file():
+        # --- PYINSTALLER FIX: Use resource_path ---
+        logo_path_str = resource_path("images/logo.png")
+        if pathlib.Path(logo_path_str).is_file():
             try:
                 if PIL_AVAILABLE:
-                    with Image.open(str(logo_path)) as pil_img: # 1. Open
+                    with Image.open(logo_path_str) as pil_img: # 1. Open
                         # Assumed background color in top-left corner
                         bg_color = pil_img.getpixel((0, 0))
                         diff = ImageChops.difference(pil_img, Image.new(pil_img.mode, pil_img.size, bg_color))
@@ -317,7 +332,7 @@ class LoaderApp(tk.Tk):
                     self.logo_img = ImageTk.PhotoImage(pil_img) # 6. Create Tk image
                 
                 else: # Fallback without PIL
-                    img = tk.PhotoImage(file=str(logo_path))
+                    img = tk.PhotoImage(file=logo_path_str)
                     max_dim = 100
                     if img.width() > max_dim or img.height() > max_dim:
                         factor = max(img.width()//max_dim, img.height()//max_dim)
@@ -329,18 +344,19 @@ class LoaderApp(tk.Tk):
 
         # --- Load Pet ---
         self.pet_img = None
-        pet_path = pathlib.Path(__file__).resolve().parent / "images" / "pet.png"
-        if pet_path.is_file():
+        # --- PYINSTALLER FIX: Use resource_path ---
+        pet_path_str = resource_path("images/pet.png")
+        if pathlib.Path(pet_path_str).is_file():
             try:
                 if PIL_AVAILABLE:
-                    with Image.open(str(pet_path)) as pil_pet:
+                    with Image.open(pet_path_str) as pil_pet:
                         pil_pet.load() # Load data
                     
                     max_pet_dim = 140
                     pil_pet.thumbnail((max_pet_dim, max_pet_dim), RESAMPLE_FILTER) # Resize in-place
                     self.pet_img = ImageTk.PhotoImage(pil_pet)
                 else: # Fallback without PIL
-                    pet = tk.PhotoImage(file=str(pet_path))
+                    pet = tk.PhotoImage(file=pet_path_str)
                     max_pet_dim = 140
                     factor = max(1, max(pet.width()//max_pet_dim, pet.height()//max_pet_dim))
                     pet = pet.subsample(factor, factor)
@@ -354,32 +370,34 @@ class LoaderApp(tk.Tk):
         self.icon_success = None
         self.icon_error = None
         
-        success_path = pathlib.Path(__file__).resolve().parent / "images" / "success.png"
-        if success_path.is_file():
+        # --- PYINSTALLER FIX: Use resource_path ---
+        success_path_str = resource_path("images/success.png")
+        if pathlib.Path(success_path_str).is_file():
             try:
                 if PIL_AVAILABLE:
-                    with Image.open(str(success_path)) as pil_succ:
+                    with Image.open(success_path_str) as pil_succ:
                         pil_succ.load()
                     pil_succ.thumbnail((icon_dim, icon_dim), RESAMPLE_FILTER)
                     self.icon_success = ImageTk.PhotoImage(pil_succ)
                 else: # Fallback without PIL
-                    img = tk.PhotoImage(file=str(success_path))
+                    img = tk.PhotoImage(file=success_path_str)
                     w,h = img.width(), img.height()
                     factor = max(1, max(w//icon_dim, h//icon_dim))
                     self.icon_success = img.subsample(factor, factor)
             except Exception as e:
                 print(f"Error loading success icon: {e}") # Added for debugging
 
-        fail_path = pathlib.Path(__file__).resolve().parent / "images" / "fail.png"
-        if fail_path.is_file():
+        # --- PYINSTALLER FIX: Use resource_path ---
+        fail_path_str = resource_path("images/fail.png")
+        if pathlib.Path(fail_path_str).is_file():
             try:
                 if PIL_AVAILABLE:
-                    with Image.open(str(fail_path)) as pil_fail:
+                    with Image.open(fail_path_str) as pil_fail:
                         pil_fail.load()
                     pil_fail.thumbnail((icon_dim, icon_dim), RESAMPLE_FILTER)
                     self.icon_error = ImageTk.PhotoImage(pil_fail)
                 else: # Fallback without PIL
-                    img = tk.PhotoImage(file=str(fail_path))
+                    img = tk.PhotoImage(file=fail_path_str)
                     w,h = img.width(), img.height()
                     factor = max(1, max(w//icon_dim, h//icon_dim))
                     self.icon_error = img.subsample(factor, factor)
@@ -638,7 +656,7 @@ class LoaderApp(tk.Tk):
 
     def _flash_thread(self, bin_file, port):
         # --- NEW: Build args based on checkbox ---
-        base_args = ["--chip", "esp32s3",
+        base_args = ["--chip", "esp32s3", # Corrected typo
                      "--port", port,
                      "--baud", str(BAUD_RATE)]
         
