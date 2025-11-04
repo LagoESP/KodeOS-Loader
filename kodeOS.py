@@ -34,6 +34,7 @@ from serial.tools import list_ports
 
 BAUD_RATE = 460800
 # Original color palette with orange and gray
+WHITE = "#FFFFFF"         # White
 BG = "#E1E1E1"            # Original light gray background
 ACCENT = "#FF7F1F"        # Original orange
 ACCENT_HOVER = "#FFB184"  # Light orange for hover
@@ -59,10 +60,11 @@ LANGUAGES = {
         'window_title': "kodeOS Loader",
         'serial_port_label': "Serial Port:",
         'firmware_label': "Firmware (.bin):",
+        'flash_app_checkbox': "Flash Kode OS App (0x400000)", # New
         'refresh_button': "Refresh",
         'browse_button': "Browse",
-        'load_button': "Flash",
-        'load_button_loading': "Flashing...",
+        'load_button': "Flash", # Changed
+        'load_button_loading': "Flashing...", # Changed
         'erase_button': "Erase",
         'erase_button_erasing': "Erasing...",
         'ports_loading': "Loading ports...",
@@ -87,10 +89,11 @@ LANGUAGES = {
         'window_title': "Cargador kodeOS",
         'serial_port_label': "Puerto Serial:",
         'firmware_label': "Firmware (.bin):",
+        'flash_app_checkbox': "Flashear App Kode OS (0x400000)", # New
         'refresh_button': "Refrescar",
         'browse_button': "Buscar",
-        'load_button': "Cargar",
-        'load_button_loading': "Cargando...",
+        'load_button': "Flashear", # Changed
+        'load_button_loading': "Flasheando...", # Changed
         'erase_button': "Borrar",
         'erase_button_erasing': "Borrando...",
         'ports_loading': "Buscando puertos...",
@@ -217,9 +220,6 @@ class LoaderApp(tk.Tk):
         self.configure(bg=BG)  # gray background window
         self.resizable(False, False)
         
-        # --- Collapsible log state (REMOVED) ---
-        # self.logs_visible = False
-        
         # Load icons and resources
         self._load_resources()
         self._build_ui()
@@ -254,10 +254,9 @@ class LoaderApp(tk.Tk):
         self.title(self.get_string('window_title'))
         self.serial_label.config(text=self.get_string('serial_port_label'))
         self.firmware_label.config(text=self.get_string('firmware_label'))
+        self.flash_app_check.config(text=self.get_string('flash_app_checkbox')) # New
         self.refresh_btn.set_text(self.get_string('refresh_button'))
         self.browse_btn.set_text(self.get_string('browse_button'))
-        
-        # Update log toggle label (REMOVED)
         
         # Only update load button if it's not disabled
         if not self.load_btn.state_disabled:
@@ -393,10 +392,10 @@ class LoaderApp(tk.Tk):
         # Use grid for a compact layout with margins
         self.configure(padx=15, pady=15)
         
-        # --- FIX: Changed rowspan to 4 ---
-        # Left frame for logo and pet
+        # --- Left frame for logo and pet ---
         left_frame = tk.Frame(self, bg=BG)
-        left_frame.grid(row=0, column=0, rowspan=4, sticky="nw", padx=(0,4), pady=0)
+        # --- FIX: rowspan is 5 to cover rows 0-4 ---
+        left_frame.grid(row=0, column=0, rowspan=5, sticky="nw", padx=(0,4), pady=0)
         # Show logo if it exists
         if getattr(self, 'logo_img', None):
             # Small logo, no extra padding
@@ -417,17 +416,15 @@ class LoaderApp(tk.Tk):
         self.columnconfigure(2, weight=1) # Column 2: Inputs (Expand)
         self.columnconfigure(3, weight=0) # Column 3: Buttons
         
-        # Reduce space between rows
+        # Reduce space between rows (Rows 0-3)
         for i in range(4):
             self.rowconfigure(i, pad=1)
         
         # ROW 0: Serial Port
-        # Serial Port Label
         LABEL_FONT = ("Segoe UI", 12, "bold")
         self.serial_label = tk.Label(self, text=self.get_string('serial_port_label'), bg=BG, fg=TEXT_DARK, font=LABEL_FONT)
         self.serial_label.grid(row=0, column=1, sticky="e", padx=(0,4), pady=0)
         
-        # Variable and combobox
         self.port_var = tk.StringVar()
         initial_port_value = self.get_string('ports_loading')
         self.port_var.set(initial_port_value)
@@ -436,12 +433,9 @@ class LoaderApp(tk.Tk):
         self.port_combo.config(font=FONT, bg=BG, fg=TEXT_DARK, 
                                activebackground=ACCENT, activeforeground=TEXT_LIGHT,
                                highlightthickness=1, highlightbackground=GRAY_LIGHT, bd=0)
-        # Use sticky="ew" to fill column
         self.port_combo.grid(row=0, column=2, sticky="ew")
-        # Keep dark text color after selection
         self.port_var.trace_add('write', lambda *args: self.port_combo.config(fg=TEXT_DARK))
         
-        # Refresh button
         self.refresh_btn = RoundedButton(self, text=self.get_string('refresh_button'), command=self._refresh_ports,
                                       width=80, height=INPUT_HEIGHT, bg=ACCENT, fg=TEXT_LIGHT,
                                       active_bg=ACCENT_HOVER)
@@ -451,55 +445,59 @@ class LoaderApp(tk.Tk):
         self.firmware_label = tk.Label(self, text=self.get_string('firmware_label'), bg=BG, fg=TEXT_DARK, font=LABEL_FONT)
         self.firmware_label.grid(row=1, column=1, sticky="e", padx=(0,4), pady=0)
         
-        # Entry for build folder
         self.build_var = tk.StringVar()
         self.build_entry = tk.Entry(self, textvariable=self.build_var, 
                                   font=FONT, bg=BG, fg=TEXT_DARK, 
                                   relief=tk.FLAT, highlightthickness=1, 
                                   highlightbackground=GRAY_LIGHT,
                                   width=30) # Set a minimum width
-        # Use sticky="ew" to fill column
         self.build_entry.grid(row=1, column=2, sticky="ew", padx=0, pady=0)
 
-        # Browse button
         self.browse_btn = RoundedButton(self, text=self.get_string('browse_button'), command=self._browse,
                                       width=80, height=INPUT_HEIGHT, bg=ACCENT, fg=TEXT_LIGHT,
                                       active_bg=ACCENT_HOVER)
         self.browse_btn.grid(row=1, column=3, padx=(2,0), pady=0)
 
-        # --- ROW 2: LOAD and ERASE buttons (Progress Bar removed) ---
+        # --- ROW 2: Flash App Checkbox ---
+        self.flash_app_var = tk.IntVar(value=0)
+        self.flash_app_check = tk.Checkbutton(self, 
+                                             text=self.get_string('flash_app_checkbox'),
+                                             variable=self.flash_app_var,
+                                             bg=BG, fg=TEXT_DARK, font=FONT,
+                                             activebackground=BG, activeforeground=TEXT_DARK,
+                                             selectcolor=WHITE,
+                                             highlightthickness=0, bd=0)
+        self.flash_app_check.grid(row=2, column=1, columnspan=2, sticky="w", padx=0, pady=(5,0))
+
+
+        # --- ROW 3: LOAD and ERASE buttons ---
         button_frame = tk.Frame(self, bg=BG)
-        # Span columns 1 and 2
-        button_frame.grid(row=2, column=1, columnspan=2, pady=(10,2), sticky="ew") # Added top padding
+        button_frame.grid(row=3, column=1, columnspan=2, pady=(10,2), sticky="ew")
         button_frame.grid_columnconfigure(0, weight=1) # Left side
         button_frame.grid_columnconfigure(1, weight=1) # Right side
 
-        # Load button (on the left)
         self.load_btn = RoundedButton(button_frame, text=self.get_string('load_button'), width=160, height=38, 
                                       command=self._start_flash, bg=ACCENT, fg=TEXT_LIGHT)
-        self.load_btn.grid(row=0, column=0, padx=5, sticky='e') # Aligned to the right of its cell
+        self.load_btn.grid(row=0, column=0, padx=5, sticky='e') 
 
-        # Erase button (on the right)
         self.erase_btn = RoundedButton(button_frame, text=self.get_string('erase_button'), width=160, height=38,
                                        command=self._start_erase, 
-                                       bg=COLOR_ERROR, # Red button
-                                       fg=TEXT_LIGHT, 
-                                       active_bg=COLOR_ERROR_HOVER) # Lighter red hover
-        self.erase_btn.grid(row=0, column=1, padx=5, sticky='w') # Aligned to the left of its cell
+                                       bg=COLOR_ERROR, fg=TEXT_LIGHT, 
+                                       active_bg=COLOR_ERROR_HOVER) 
+        self.erase_btn.grid(row=0, column=1, padx=5, sticky='w') 
         
         
-        # --- ROW 3: Label for result/notification (below the button) ---
+        # --- ROW 4: Label for result/notification (below the button) ---
         self.result_label = tk.Label(self, text=self.get_string('status_ready'), 
                                      bg=BG, fg=COLOR_INFO, font=FONT_BOLD, 
                                      compound=tk.LEFT, 
                                      anchor="center", justify=tk.CENTER) # Centered text
-        # Span columns 1 and 2
-        self.result_label.grid(row=3, column=1, columnspan=2, sticky="ew", padx=0, pady=(4,0))
+        self.result_label.grid(row=4, column=1, columnspan=2, sticky="ew", padx=0, pady=(4,0))
 
 
-        # --- ROW 4: Log Area (Permanent) ---
+        # --- ROW 5: Log Area (Permanent) ---
         self.log_frame = tk.Frame(self, bg=BG)
-        self.log_frame.grid(row=4, column=0, columnspan=4, sticky="nsew", pady=(10,0))
+        self.log_frame.grid(row=5, column=0, columnspan=4, sticky="nsew", pady=(10,0))
         self.log_frame.grid_columnconfigure(0, weight=1)
         self.log_frame.grid_rowconfigure(0, weight=1)
 
@@ -513,12 +511,12 @@ class LoaderApp(tk.Tk):
         log_scrollbar.grid(row=0, column=1, sticky="ns")
         self.log_text.config(yscrollcommand=log_scrollbar.set)
         
-        # Configure row 4 (the log's row) to expand
-        self.rowconfigure(4, weight=1)
+        # Configure row 5 (the log's row) to expand
+        self.rowconfigure(5, weight=1)
 
-        # --- ROW 5: Language Switcher ---
+        # --- ROW 6: Language Switcher ---
         lang_frame = tk.Frame(self, bg=BG)
-        lang_frame.grid(row=5, column=0, columnspan=4, sticky="e", pady=(5,0))
+        lang_frame.grid(row=6, column=0, columnspan=4, sticky="e", pady=(5,0))
         
         # Added from right to left
         self.es_label = tk.Label(lang_frame, text="Español", bg=BG, fg=GRAY_MID, font=FONT, cursor="hand2")
@@ -534,8 +532,6 @@ class LoaderApp(tk.Tk):
         # Initialize ports
         self._refresh_ports()
         
-    # --- Log Toggle Method (REMOVED) ---
-    
     # --- Notifications ---
     def _show_notification(self, message_key, level='info'):
         """Shows a notification in self.result_label."""
@@ -604,9 +600,6 @@ class LoaderApp(tk.Tk):
         self.log_text.insert(tk.END, message)
         self.log_text.see(tk.END)
         self.log_text.config(state=tk.DISABLED)
-        # Automatically show logs if hidden (REMOVED)
-        # if not self.logs_visible:
-        #     self._toggle_logs()
 
     # --- Button state management ---
     def _set_controls_disabled(self, disabled=True):
@@ -624,6 +617,7 @@ class LoaderApp(tk.Tk):
         entry_state = "readonly" if disabled else tk.NORMAL # Use readonly for Entry
         self.port_combo.config(state=combo_state)
         self.build_entry.config(state=entry_state)
+        self.flash_app_check.config(state=combo_state) # Disable checkbox
 
 
     # Flash logic --------------------------------------------------------
@@ -643,10 +637,24 @@ class LoaderApp(tk.Tk):
         threading.Thread(target=self._flash_thread, args=(build, port), daemon=True).start()
 
     def _flash_thread(self, bin_file, port):
-        args = ["--chip", "esp3dss",
-                "--port", port,
-                "--baud", str(BAUD_RATE),
-                "write_flash", "-z", "0x0", bin_file]
+        # --- NEW: Build args based on checkbox ---
+        base_args = ["--chip", "esp32s3",
+                     "--port", port,
+                     "--baud", str(BAUD_RATE)]
+        
+        if self.flash_app_var.get() == 1:
+            # Kode OS App Flash (0x400000)
+            flash_args = ["write_flash", 
+                          "--flash-freq", "80m", 
+                          "--flash-mode", "dio", 
+                          "--flash-size", "32MB", 
+                          "0x400000", bin_file]
+        else:
+            # Default Flash (0x0)
+            flash_args = ["write_flash", "-z", "0x0", bin_file]
+            
+        args = base_args + flash_args
+        # --- End new args logic ---
         
         all_logs = []
         return_code = 1 # Default to error
