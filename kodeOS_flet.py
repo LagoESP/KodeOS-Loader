@@ -248,6 +248,8 @@ def main(page: ft.Page):
         page.update()
 
     def _set_language(e, new_lang):
+        if load_btn.current.disabled:
+            return
         nonlocal lang
         if lang == new_lang:
             return
