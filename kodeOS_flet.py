@@ -146,9 +146,9 @@ def main(page: ft.Page):
     INPUT_HEIGHT = 28
     
     try:
-        icon_path = resource_path("icon.png") 
+        icon_path = resource_path("images/favicon.png") 
         if not pathlib.Path(icon_path).is_file():
-             icon_path = resource_path("icon.ico")
+             icon_path = resource_path("images/favicon.ico")
         page.window_icon = icon_path
     except Exception as e:
         print(f"Icon not found ({e}), using default.")
@@ -564,12 +564,12 @@ def main(page: ft.Page):
                     content=ft.Column(
                         [
                             ft.Image(
-                                src="logo.png",
+                                src=resource_path("images/logo.png"),
                                 width=100, 
                                 fit=ft.ImageFit.CONTAIN
                             ),
                             ft.Image(
-                                src="pet.png", 
+                                src=resource_path("images/pet.png"),
                                 width=140, 
                                 fit=ft.ImageFit.CONTAIN
                             ),
