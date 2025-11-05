@@ -83,6 +83,8 @@ LANGUAGES = {
         'status_ready': "Ready to flash",
         'status_starting': "Starting flash...",
         'status_erasing': "Erasing flash...",
+        # --- NUEVA LÍNEA ---
+        'status_erasing_critical': "ERASING FLASH... DO NOT DISCONNECT THE DEVICE!",
         'flashing_progress': "Flashing ({pct}%)...",
         'error_missing_params': "Select serial port and firmware .bin file.",
         'error_missing_port': "Please select a serial port.",
@@ -113,6 +115,8 @@ LANGUAGES = {
         'status_ready': "Listo para flashear",
         'status_starting': "Iniciando flasheo...",
         'status_erasing': "Borrando flash...",
+        # --- NUEVA LÍNEA ---
+        'status_erasing_critical': "BORRANDO FLASH... ¡NO DESCONECTE EL DISPOSITIVO!",
         'flashing_progress': "Flasheando ({pct}%)...",
         'error_missing_params': "Seleccione un puerto serial y un archivo .bin.",
         'error_missing_port': "Por favor, seleccione un puerto serial.",
@@ -173,37 +177,7 @@ def main(page: ft.Page):
     es_lang_button = ft.Ref[ft.Text]()
     serial_label_text = ft.Ref[ft.Text]()
     firmware_label_text = ft.Ref[ft.Text]()
-    dialog_title_ref = ft.Ref[ft.Text]()
-    dialog_content_ref = ft.Ref[ft.Text]()
     
-    # --- Diálogo de Confirmación de Borrado ---
-    confirm_dialog = ft.AlertDialog(
-        modal=True,
-        title=ft.Text(ref=dialog_title_ref, value=LANGUAGES[lang]['erase_confirm_title']),
-        content=ft.Text(ref=dialog_content_ref, value=LANGUAGES[lang]['erase_confirm_message']),
-        actions_alignment=ft.MainAxisAlignment.END,
-    )
-    page.dialog = confirm_dialog
-    
-    def on_erase_confirmed(e):
-        close_dialog(e)
-        _clear_log_area()
-        _set_controls_disabled(True)
-        erase_btn.current.text = get_string('erase_button_erasing')
-        _show_notification('status_erasing', 'info')
-        
-        port = port_dropdown.current.value
-        threading.Thread(target=_erase_thread, args=(port,), daemon=True).start()
-
-    def close_dialog(e):
-        confirm_dialog.open = False
-        page.update()
-        
-    confirm_dialog.actions = [
-        ft.TextButton("Yes", on_click=on_erase_confirmed),
-        ft.TextButton("No", on_click=close_dialog),
-    ]
-
     # --- Lógica de la Aplicación (Funciones anidadas) ---
 
     def get_string(key):
@@ -235,13 +209,13 @@ def main(page: ft.Page):
         if not erase_btn.current.disabled:
             erase_btn.current.text = get_string('erase_button')
         
-        dialog_title_ref.current.value = get_string('erase_confirm_title')
-        dialog_content_ref.current.value = get_string('erase_confirm_message')
+        # --- Diálogo eliminado ---
 
         _refresh_ports(update_text=True) 
         
         if current_notification:
             key, level = current_notification
+            # --- MODIFICACIÓN: No sobreescribir el mensaje de borrado ---
             if not key.startswith('flashing_progress') and not key.startswith('status_erasing'):
                 _show_notification(key, level)
         elif not load_btn.current.disabled:
@@ -250,8 +224,10 @@ def main(page: ft.Page):
         page.update()
 
     def _set_language(e, new_lang):
+        # --- FIX: Bloquear cambio de idioma durante flasheo ---
         if load_btn.current.disabled:
             return
+            
         nonlocal lang
         if lang == new_lang:
             return
@@ -339,10 +315,12 @@ def main(page: ft.Page):
         notification_icon.current.color = None
         
         if level == 'success':
+            # --- FIX: Usar ft.Icons con 'I' mayúscula ---
             notification_icon.current.name = ft.Icons.CHECK_CIRCLE
             notification_icon.current.color = COLOR_SUCCESS
             notification_text.current.color = COLOR_SUCCESS
         elif level == 'error':
+            # --- FIX: Usar ft.Icons con 'I' mayúscula ---
             notification_icon.current.name = ft.Icons.ERROR
             notification_icon.current.color = COLOR_ERROR
             notification_text.current.color = COLOR_ERROR
@@ -364,6 +342,7 @@ def main(page: ft.Page):
             log_view.current.update()
 
     def _update_log_area(message):
+        # --- A PETICIÓN: Se mantiene page.run_thread ---
         page.run_thread(_update_log_area_safe, message)
 
     def _set_controls_disabled(disabled=True):
@@ -417,6 +396,7 @@ def main(page: ft.Page):
                     if m:
                         pct = int(m.group(1))
                         msg = get_string('flashing_progress').format(pct=pct)
+                        # --- A PETICIÓN: Se mantiene page.run_thread ---
                         page.run_thread(
                             lambda: notification_text.current.set_value(msg)
                         )
@@ -440,6 +420,7 @@ def main(page: ft.Page):
             sys.stderr = original_stderr
             captured_output = stream_logger.getvalue()
             all_logs.append(captured_output)
+            # --- A PETICIÓN: Se mantiene page.run_thread ---
             page.run_thread(_flash_complete, return_code, "".join(all_logs))
 
     def _start_flash(e):
@@ -510,16 +491,25 @@ def main(page: ft.Page):
             sys.stderr = original_stderr
             captured_output = stream_logger.getvalue()
             all_logs.append(captured_output)
+            # --- A PETICIÓN: Se mantiene page.run_thread ---
             page.run_thread(_erase_complete, return_code, "".join(all_logs))
             
     def _start_erase(e):
+        # --- FIX: Eliminado popup de confirmación ---
         port = port_dropdown.current.value
         if not port:
             _show_notification('error_missing_port', 'error')
             return
-            
-        confirm_dialog.open = True
-        page.update()
+
+        # Proceder directamente al borrado
+        _clear_log_area()
+        _set_controls_disabled(True)
+        erase_btn.current.text = get_string('erase_button_erasing')
+        # --- MODIFICACIÓN: Mostrar mensaje crítico en rojo ---
+        _show_notification('status_erasing_critical', 'error')
+        
+        threading.Thread(target=_erase_thread, args=(port,), daemon=True).start()
+        # --- FIN DEL FIX ---
 
     def _erase_complete(rc, logs):
         _set_controls_disabled(False)
