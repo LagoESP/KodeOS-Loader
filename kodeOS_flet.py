@@ -178,13 +178,15 @@ def main(page: ft.Page):
     
     INPUT_HEIGHT = 28
     
+    # --- FIX: Set the Window Icon ---
+    # This sets the icon in the top-left corner of the window.
     try:
-        icon_path = resource_path("images/favicon.png") 
-        if not pathlib.Path(icon_path).is_file():
-             icon_path = resource_path("images/favicon.ico")
+        # Use the 'icon.ico' file you added
+        icon_path = resource_path("images/icon.ico")
         page.window_icon = icon_path
     except Exception as e:
-        print(f"Icon not found ({e}), using default.")
+        print(f"Window icon not found at 'images/icon.ico' ({e}), using Flet default.")
+    # --- END ICON FIX ---
 
     # --- App State ---
     lang = 'en'
