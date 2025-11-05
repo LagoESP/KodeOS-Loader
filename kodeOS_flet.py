@@ -159,6 +159,7 @@ def main(page: ft.Page):
 
     # --- Referencias a Controles ---
     port_dropdown = ft.Ref[ft.Dropdown]()
+    port_dropdown_container = ft.Ref[ft.Container]() # Contenedor para "destruir" el dropdown
     firmware_path = ft.Ref[ft.TextField]()
     flash_app_check = ft.Ref[ft.Checkbox]()
     load_btn = ft.Ref[ft.ElevatedButton]()
@@ -262,30 +263,55 @@ def main(page: ft.Page):
         ]
         return usb_ports
 
+    def _create_port_dropdown():
+        """Crea una nueva instancia de Dropdown para limpiar el estado."""
+        # El estilo de texto se define en body_style
+        body_style = ft.TextStyle(size=FONT_SIZE, font_family=FONT_FAMILY, color=TEXT_DARK)
+        
+        new_dd = ft.Dropdown(
+            ref=port_dropdown, # Asigna la ref al nuevo control
+            label_style=ft.TextStyle(size=FONT_SIZE, font_family=FONT_FAMILY, color=GRAY_MID),
+            expand=True,
+            border_color=GRAY_LIGHT,
+            border_width=1.5,
+            content_padding=10,
+            text_style=body_style, # <-- FIX: Color de texto aplicado
+        )
+        return new_dd
+
     def _refresh_ports(e=None, update_text=False):
-        current_val = port_dropdown.current.value
-        port_dropdown.current.options.clear()
+        # --- FIX: Lógica de "Destruir y Rehacer" ---
+        
+        # 1. Guardar el valor antiguo (si existe) ANTES de destruir
+        old_value = port_dropdown.current.value if port_dropdown.current else None
+        
+        # 2. Crear y asignar un Dropdown completamente nuevo
+        new_dropdown = _create_port_dropdown()
+        port_dropdown_container.current.content = new_dropdown
+        page.update() # Forzar redibujo inmediato
+
+        # 3. Rellenar el nuevo dropdown
         ports = _list_ports()
         
         if ports:
+            new_dropdown.options.clear() # Limpiar (aunque es new, por si acaso)
             for p in ports:
-                port_dropdown.current.options.append(ft.dropdown.Option(p))
+                new_dropdown.options.append(ft.dropdown.Option(p))
             
-            # --- FIX: Comprobar si el valor seleccionado sigue siendo válido ---
-            if current_val in ports and not update_text:
-                port_dropdown.current.value = current_val
-                port_dropdown.current.label = None # Borrar label si hay valor
+            # Comprobar si el valor antiguo sigue siendo válido
+            if old_value in ports and not update_text:
+                new_dropdown.value = old_value # Restaurar valor
+                new_dropdown.label = None
             else:
-                # Si el valor no es válido (ej. desconectado) o cambiamos de idioma
-                port_dropdown.current.value = None
-                port_dropdown.current.label = get_string('select_port_prompt')
+                new_dropdown.value = None # No seleccionar nada
+                new_dropdown.label = get_string('select_port_prompt')
             
-            port_dropdown.current.disabled = False
+            new_dropdown.disabled = False
         else:
             # No hay puertos
-            port_dropdown.current.value = None
-            port_dropdown.current.label = get_string('no_ports_found')
-            port_dropdown.current.disabled = True
+            new_dropdown.value = None
+            new_dropdown.label = get_string('no_ports_found')
+            new_dropdown.disabled = True
             
         page.update()
 
@@ -345,13 +371,12 @@ def main(page: ft.Page):
         firmware_path.current.disabled = disabled
         flash_app_check.current.disabled = disabled
         
-        # El Dropdown debe deshabilitarse si se le dice, O si no hay puertos
+        # --- FIX: Lógica de habilitación/deshabilitación del dropdown ---
         if disabled:
             port_dropdown.current.disabled = True
         else:
-            # Re-evaluar si hay puertos
-            _refresh_ports() 
-            # (la función _refresh_ports ya maneja el estado disabled)
+            # Al habilitar, solo habilitar si hay opciones en la lista
+            port_dropdown.current.disabled = (len(port_dropdown.current.options) == 0)
 
         page.update()
 
@@ -436,7 +461,7 @@ def main(page: ft.Page):
     def _flash_complete(rc, logs):
         _set_controls_disabled(False)
         load_btn.current.text = get_string('load_button')
-        # _refresh_ports() # No es necesario, _set_controls_disabled(False) ya lo hace
+        _refresh_ports() # <-- FIX: Refrescar estado del puerto al finalizar
         if rc == 0:
             _show_notification('flash_success', 'success')
             _update_log_area(f"\n{get_string('flash_success')}!\n")
@@ -496,7 +521,7 @@ def main(page: ft.Page):
         _set_controls_disabled(False)
         load_btn.current.text = get_string('load_button')
         erase_btn.current.text = get_string('erase_button')
-        # _refresh_ports() # No es necesario, _set_controls_disabled(False) ya lo hace
+        _refresh_ports() # <-- FIX: Refrescar estado del puerto al finalizar
         
         if rc == 0:
             _show_notification('erase_success', 'success')
@@ -551,7 +576,7 @@ def main(page: ft.Page):
     
     # Estilos de texto
     label_style = ft.TextStyle(weight=ft.FontWeight.BOLD, size=FONT_SIZE_BOLD, font_family=FONT_FAMILY, color=TEXT_DARK)
-    body_style = ft.TextStyle(size=FONT_SIZE, font_family=FONT_FAMILY, color=TEXT_DARK) # <-- FIX: Color de texto añadido
+    body_style = ft.TextStyle(size=FONT_SIZE, font_family=FONT_FAMILY, color=TEXT_DARK)
     
     # --- Construir la página ---
     page.add(
@@ -586,15 +611,11 @@ def main(page: ft.Page):
                         ft.Row(
                             [
                                 ft.Text(ref=serial_label_text, value=get_string('serial_port_label'), style=label_style, width=110, text_align=ft.TextAlign.RIGHT),
-                                ft.Dropdown(
-                                    ref=port_dropdown,
-                                    label=get_string('ports_loading'),
-                                    label_style=ft.TextStyle(size=FONT_SIZE, font_family=FONT_FAMILY, color=GRAY_MID),
-                                    expand=True,
-                                    border_color=GRAY_LIGHT,
-                                    border_width=1.5,
-                                    content_padding=10,
-                                    text_style=body_style, # <-- FIX: Este estilo ahora tiene color
+                                # --- FIX: Contenedor para "destruir y rehacer" el dropdown ---
+                                ft.Container(
+                                    ref=port_dropdown_container,
+                                    content=_create_port_dropdown(), # Crear la instancia inicial
+                                    expand=True
                                 ),
                                 ft.ElevatedButton(
                                     ref=refresh_btn,
@@ -621,7 +642,7 @@ def main(page: ft.Page):
                                     border_color=GRAY_LIGHT,
                                     text_size=FONT_SIZE,
                                     content_padding=10,
-                                    text_style=body_style, # <-- FIX: Este estilo ahora tiene color
+                                    text_style=body_style, # <-- FIX: Color aplicado
                                 ),
                                 ft.ElevatedButton(
                                     ref=browse_btn,
