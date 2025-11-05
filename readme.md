@@ -103,18 +103,33 @@ This process uses `flet pack` and requires a **specifically named virtual enviro
 
 This process creates a `.deb` package that will install the app, add it to the application menu, and set the correct icon.
 
-1.  **Install build tools:**
+1.  **Clone the repository** (if not already done):
+    ```sh
+    git clone https://github.com/lagoesp/kodeos-loader.git
+    cd kodeos-loader
+    ```
+
+2.  **Create and activate a venv (Recommended):**
+    *Using a venv is recommended to isolate build packages.*
+    ```sh
+    python3 -m venv KodeOS-Loader
+    source KodeOS-Loader/bin/activate
+    ```
+    
+3.  **Install build tools:**
+    *Installs build-specific tools into your venv and system.*
     ```sh
     pip install pyinstaller
     sudo apt-get install dpkg-dev
     ```
 
-2.  **Run the build script:**
+4.  **Run the build script:**
+    *The script uses the system's `python3`, not the venv's.*
     ```sh
     python3 kodeOS_flet_build_linux.py
     ```
 
-3.  **Get your package:**
+5.  **Get your package:**
     Your final distributable file will be in the `release/` folder (e.g., `release/kodeos-loader_1.0.0-1_amd64.deb`).
 
 ### Build for macOS (Placeholder)
