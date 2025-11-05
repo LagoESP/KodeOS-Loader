@@ -69,17 +69,18 @@ LANGUAGES = {
         'window_title': "kodeOS Loader",
         'serial_port_label': "Serial Port:",
         'firmware_label': "Firmware (.bin):",
-        'flash_app_checkbox': "Flash Kode OS App (0x400000)", # New
+        'flash_app_checkbox': "Flash Kode OS App (0x400000)",
         'refresh_button': "Refresh",
         'browse_button': "Browse",
-        'load_button': "Flash", # Changed
-        'load_button_loading': "Flashing...", # Changed
+        'load_button': "Flash",
+        'load_button_loading': "Flashing...",
         'erase_button': "Erase",
         'erase_button_erasing': "Erasing...",
         'ports_loading': "Loading ports...",
         'no_ports_found': "No USB ports found",
+        'select_port_prompt': "Select your upload USB port", # New
         'browse_dialog_title': "Select firmware .bin",
-        'status_ready': "Ready to flash", # Changed
+        'status_ready': "Ready to flash",
         'status_starting': "Starting flash...",
         'status_erasing': "Erasing flash...",
         'flashing_progress': "Flashing ({pct}%)...",
@@ -98,17 +99,18 @@ LANGUAGES = {
         'window_title': "Cargador kodeOS",
         'serial_port_label': "Puerto Serial:",
         'firmware_label': "Firmware (.bin):",
-        'flash_app_checkbox': "Flashear App Kode OS (0x400000)", # New
+        'flash_app_checkbox': "Flashear App Kode OS (0x400000)",
         'refresh_button': "Refrescar",
         'browse_button': "Buscar",
-        'load_button': "Flashear", # Changed
-        'load_button_loading': "Flasheando...", # Changed
+        'load_button': "Flashear",
+        'load_button_loading': "Flasheando...",
         'erase_button': "Borrar",
         'erase_button_erasing': "Borrando...",
         'ports_loading': "Buscando puertos...",
         'no_ports_found': "No se encontraron puertos USB",
+        'select_port_prompt': "Seleccione su puerto USB", # New
         'browse_dialog_title': "Seleccionar firmware .bin",
-        'status_ready': "Listo para flashear", # Changed
+        'status_ready': "Listo para flashear",
         'status_starting': "Iniciando flasheo...",
         'status_erasing': "Borrando flash...",
         'flashing_progress': "Flasheando ({pct}%)...",
@@ -133,22 +135,19 @@ def main(page: ft.Page):
     page.title = LANGUAGES['en']['window_title']
     page.bgcolor = BG
     page.window_resizable = False
-    page.window_width = 750  # Ancho ajustado para Flet
-    page.window_height = 640 # Alto ajustado para Flet
+    page.window_width = 750
+    page.window_height = 640
     page.padding = 15
     page.fonts = {
-        "Segoe UI": "https://path.to/segoe_ui.ttf" # Si quisieras empaquetar la fuente
+        "Segoe UI": "https://path.to/segoe_ui.ttf" 
     }
     
-    # --- FIX: Definir la constante que faltaba ---
     INPUT_HEIGHT = 28
     
     # --- Carga de Icono Multiplataforma ---
     try:
-        # Flet prefiere .png para el icono de la ventana
         icon_path = resource_path("icon.png") 
         if not pathlib.Path(icon_path).is_file():
-             # Fallback a .ico (principalmente para Windows)
              icon_path = resource_path("icon.ico")
         page.window_icon = icon_path
     except Exception as e:
@@ -158,7 +157,7 @@ def main(page: ft.Page):
     lang = 'en'
     current_notification = None
 
-    # --- Referencias a Controles (para actualizarlos) ---
+    # --- Referencias a Controles ---
     port_dropdown = ft.Ref[ft.Dropdown]()
     firmware_path = ft.Ref[ft.TextField]()
     flash_app_check = ft.Ref[ft.Checkbox]()
@@ -171,8 +170,6 @@ def main(page: ft.Page):
     log_view = ft.Ref[ft.ListView]()
     en_lang_button = ft.Ref[ft.Text]()
     es_lang_button = ft.Ref[ft.Text]()
-    
-    # Etiquetas de texto (para poder actualizarlas)
     serial_label_text = ft.Ref[ft.Text]()
     firmware_label_text = ft.Ref[ft.Text]()
     
@@ -207,11 +204,9 @@ def main(page: ft.Page):
     # --- Lógica de la Aplicación (Funciones anidadas) ---
 
     def get_string(key):
-        """Gets the text string for the current language."""
         return LANGUAGES.get(lang, LANGUAGES['en']).get(key, f"<{key}>")
 
     def _update_lang_switcher_ui():
-        """Updates the language switcher highlight."""
         if lang == 'en':
             en_lang_button.current.weight = ft.FontWeight.BOLD
             en_lang_button.current.color = ACCENT
@@ -225,7 +220,6 @@ def main(page: ft.Page):
         page.update()
 
     def _update_ui_text():
-        """Updates all text widgets with the current language."""
         page.title = get_string('window_title')
         serial_label_text.current.value = get_string('serial_port_label')
         firmware_label_text.current.value = get_string('firmware_label')
@@ -238,7 +232,6 @@ def main(page: ft.Page):
         if not erase_btn.current.disabled:
             erase_btn.current.text = get_string('erase_button')
         
-        # Actualizar diálogo de confirmación
         confirm_dialog.title.value = get_string('erase_confirm_title')
         confirm_dialog.content.value = get_string('erase_confirm_message')
 
@@ -254,7 +247,6 @@ def main(page: ft.Page):
         page.update()
 
     def _set_language(e, new_lang):
-        """Sets the new language and updates the UI."""
         nonlocal lang
         if lang == new_lang:
             return
@@ -279,15 +271,21 @@ def main(page: ft.Page):
             for p in ports:
                 port_dropdown.current.options.append(ft.dropdown.Option(p))
             
-            if current_val in ports:
+            # --- FIX: Comprobar si el valor seleccionado sigue siendo válido ---
+            if current_val in ports and not update_text:
                 port_dropdown.current.value = current_val
-            elif not current_val or update_text:
-                port_dropdown.current.value = ports[0]
+                port_dropdown.current.label = None # Borrar label si hay valor
+            else:
+                # Si el valor no es válido (ej. desconectado) o cambiamos de idioma
+                port_dropdown.current.value = None
+                port_dropdown.current.label = get_string('select_port_prompt')
             
-            port_dropdown.current.label = None
+            port_dropdown.current.disabled = False
         else:
+            # No hay puertos
             port_dropdown.current.value = None
             port_dropdown.current.label = get_string('no_ports_found')
+            port_dropdown.current.disabled = True
             
         page.update()
 
@@ -303,7 +301,6 @@ def main(page: ft.Page):
         )
 
     def _show_notification(key, level='info'):
-        """Shows a notification in the notification area."""
         nonlocal current_notification
         current_notification = (key, level)
         message = get_string(key)
@@ -330,16 +327,13 @@ def main(page: ft.Page):
         page.update()
 
     def _update_log_area_safe(message):
-        """Función interna para ser llamada de forma segura desde un hilo."""
         log_view.current.controls.append(
             ft.Text(message, size=10, font_family="Monospace", selectable=True)
         )
-        # Pequeña optimización: solo actualizar la vista si hay controles
         if len(log_view.current.controls) > 0:
-            log_view.current.update() # auto_scroll se encarga de bajar
+            log_view.current.update()
 
     def _update_log_area(message):
-        """Thread-safe way to add a line to the log"""
         page.run_thread_safe(_update_log_area_safe, message)
 
     def _set_controls_disabled(disabled=True):
@@ -348,9 +342,17 @@ def main(page: ft.Page):
         erase_btn.current.disabled = disabled
         refresh_btn.current.disabled = disabled
         browse_btn.current.disabled = disabled
-        port_dropdown.current.disabled = disabled
         firmware_path.current.disabled = disabled
         flash_app_check.current.disabled = disabled
+        
+        # El Dropdown debe deshabilitarse si se le dice, O si no hay puertos
+        if disabled:
+            port_dropdown.current.disabled = True
+        else:
+            # Re-evaluar si hay puertos
+            _refresh_ports() 
+            # (la función _refresh_ports ya maneja el estado disabled)
+
         page.update()
 
     # --- Logica de Flasheo y Borrado ---
@@ -381,7 +383,7 @@ def main(page: ft.Page):
             def write(inner_self, data):
                 super(_StreamLogger, inner_self).write(data)
                 for part in data.splitlines(True):
-                    _update_log_area(part) # Llama a la función thread-safe
+                    _update_log_area(part)
                     m = regex.search(part)
                     if m:
                         pct = int(m.group(1))
@@ -409,14 +411,16 @@ def main(page: ft.Page):
             sys.stderr = original_stderr
             captured_output = stream_logger.getvalue()
             all_logs.append(captured_output)
-            # Llamamos a _flash_complete de forma segura
             page.run_thread_safe(_flash_complete, return_code, "".join(all_logs))
 
     def _start_flash(e):
         port = port_dropdown.current.value
         build = firmware_path.current.value
         
-        if not port or not build:
+        if not port:
+             _show_notification('error_missing_port', 'error')
+             return
+        if not build:
             _show_notification('error_missing_params', 'error')
             return
             
@@ -432,6 +436,7 @@ def main(page: ft.Page):
     def _flash_complete(rc, logs):
         _set_controls_disabled(False)
         load_btn.current.text = get_string('load_button')
+        # _refresh_ports() # No es necesario, _set_controls_disabled(False) ya lo hace
         if rc == 0:
             _show_notification('flash_success', 'success')
             _update_log_area(f"\n{get_string('flash_success')}!\n")
@@ -484,7 +489,6 @@ def main(page: ft.Page):
             _show_notification('error_missing_port', 'error')
             return
             
-        # Mostrar diálogo de confirmación
         confirm_dialog.open = True
         page.update()
 
@@ -492,6 +496,7 @@ def main(page: ft.Page):
         _set_controls_disabled(False)
         load_btn.current.text = get_string('load_button')
         erase_btn.current.text = get_string('erase_button')
+        # _refresh_ports() # No es necesario, _set_controls_disabled(False) ya lo hace
         
         if rc == 0:
             _show_notification('erase_success', 'success')
@@ -506,7 +511,6 @@ def main(page: ft.Page):
 
     # --- Creación del Layout de la UI ---
     
-    # --- FIX: Usar strings en lugar de ft.MaterialState ---
     button_style_small = ft.ButtonStyle(
         bgcolor={
             "": ACCENT,
@@ -526,8 +530,8 @@ def main(page: ft.Page):
             "": TEXT_LIGHT,
             "disabled": GRAY_MID,
         },
-        shape=ft.RoundedRectangleBorder(radius=19), # height 38 -> radius 19
-        padding=ft.padding.symmetric(vertical=9), # height 38
+        shape=ft.RoundedRectangleBorder(radius=19),
+        padding=ft.padding.symmetric(vertical=9),
         overlay_color=ACCENT_HOVER,
     )
     button_style_erase = ft.ButtonStyle(
@@ -546,8 +550,8 @@ def main(page: ft.Page):
     )
     
     # Estilos de texto
-    label_style = ft.TextStyle(weight=ft.FontWeight.BOLD, size=FONT_SIZE_BOLD, font_family=FONT_FAMILY)
-    body_style = ft.TextStyle(size=FONT_SIZE, font_family=FONT_FAMILY)
+    label_style = ft.TextStyle(weight=ft.FontWeight.BOLD, size=FONT_SIZE_BOLD, font_family=FONT_FAMILY, color=TEXT_DARK)
+    body_style = ft.TextStyle(size=FONT_SIZE, font_family=FONT_FAMILY, color=TEXT_DARK) # <-- FIX: Color de texto añadido
     
     # --- Construir la página ---
     page.add(
@@ -558,7 +562,7 @@ def main(page: ft.Page):
                     content=ft.Column(
                         [
                             ft.Image(
-                                src="logo.png", # Flet busca en assets_dir
+                                src="logo.png",
                                 width=100, 
                                 fit=ft.ImageFit.CONTAIN
                             ),
@@ -572,7 +576,6 @@ def main(page: ft.Page):
                         spacing=0,
                     ),
                     padding=ft.padding.only(top=20, right=10),
-                    # Ocupa el 25% del ancho
                     width=160 
                 ),
                 
@@ -591,7 +594,7 @@ def main(page: ft.Page):
                                     border_color=GRAY_LIGHT,
                                     border_width=1.5,
                                     content_padding=10,
-                                    text_style=body_style,
+                                    text_style=body_style, # <-- FIX: Este estilo ahora tiene color
                                 ),
                                 ft.ElevatedButton(
                                     ref=refresh_btn,
@@ -599,7 +602,7 @@ def main(page: ft.Page):
                                     on_click=_refresh_ports,
                                     style=button_style_small,
                                     width=90,
-                                    height=INPUT_HEIGHT+10 # 28 + 10 padding
+                                    height=INPUT_HEIGHT+10
                                 ),
                             ],
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -618,6 +621,7 @@ def main(page: ft.Page):
                                     border_color=GRAY_LIGHT,
                                     text_size=FONT_SIZE,
                                     content_padding=10,
+                                    text_style=body_style, # <-- FIX: Este estilo ahora tiene color
                                 ),
                                 ft.ElevatedButton(
                                     ref=browse_btn,
@@ -636,7 +640,12 @@ def main(page: ft.Page):
                         ft.Checkbox(
                             ref=flash_app_check,
                             label=get_string('flash_app_checkbox'),
-                            label_style=ft.TextStyle(size=FONT_SIZE, font_family=FONT_FAMILY, weight=ft.FontWeight.NORMAL),
+                            label_style=ft.TextStyle( # <-- FIX: Color de texto añadido
+                                size=FONT_SIZE, 
+                                font_family=FONT_FAMILY, 
+                                weight=ft.FontWeight.NORMAL, 
+                                color=TEXT_DARK
+                            ),
                             check_color=ACCENT,
                             fill_color=WHITE,
                         ),
@@ -694,7 +703,6 @@ def main(page: ft.Page):
                         ),
                         
                         # --- Selector de Idioma ---
-                        # --- FIX: Envolver ft.Text en ft.Container para on_click ---
                         ft.Row(
                             [
                                 ft.Container(
@@ -714,7 +722,7 @@ def main(page: ft.Page):
                         )
                     ],
                     expand=True,
-                    spacing=5 # Espacio vertical entre filas
+                    spacing=5
                 )
             ],
             vertical_alignment=ft.CrossAxisAlignment.START,
@@ -729,7 +737,6 @@ def main(page: ft.Page):
 
 # --- Ejecutar la App ---
 if __name__ == "__main__":
-    # 'assets_dir' es crucial para que Flet encuentre "images/logo.png", etc.
     ft.app(
         target=main, 
         assets_dir=resource_path("images")
