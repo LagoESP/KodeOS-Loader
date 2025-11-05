@@ -500,7 +500,7 @@ def main(page: ft.Page):
         args = ["--chip", "esp32s3",
                 "--port", port,
                 "--baud", str(BAUD_RATE),
-                "erase_flash"]
+                "erase-flash"]
         
         return_code = 1
         _update_log_area(f"Executing esptool.main with args: {args}\n")
