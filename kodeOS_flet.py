@@ -173,12 +173,14 @@ def main(page: ft.Page):
     es_lang_button = ft.Ref[ft.Text]()
     serial_label_text = ft.Ref[ft.Text]()
     firmware_label_text = ft.Ref[ft.Text]()
+    dialog_title_ref = ft.Ref[ft.Text]()
+    dialog_content_ref = ft.Ref[ft.Text]()
     
     # --- Diálogo de Confirmación de Borrado ---
     confirm_dialog = ft.AlertDialog(
         modal=True,
-        title=ft.Text(LANGUAGES[lang]['erase_confirm_title']),
-        content=ft.Text(LANGUAGES[lang]['erase_confirm_message']),
+        title=ft.Text(ref=dialog_title_ref, value=LANGUAGES[lang]['erase_confirm_title']),
+        content=ft.Text(ref=dialog_content_ref, value=LANGUAGES[lang]['erase_confirm_message']),
         actions_alignment=ft.MainAxisAlignment.END,
     )
     page.dialog = confirm_dialog
@@ -233,8 +235,8 @@ def main(page: ft.Page):
         if not erase_btn.current.disabled:
             erase_btn.current.text = get_string('erase_button')
         
-        confirm_dialog.title.value = get_string('erase_confirm_title')
-        confirm_dialog.content.value = get_string('erase_confirm_message')
+        dialog_title_ref.current.value = get_string('erase_confirm_title')
+        dialog_content_ref.current.value = get_string('erase_confirm_message')
 
         _refresh_ports(update_text=True) 
         
@@ -337,11 +339,11 @@ def main(page: ft.Page):
         notification_icon.current.color = None
         
         if level == 'success':
-            notification_icon.current.name = ft.icons.CHECK_CIRCLE
+            notification_icon.current.name = ft.Icons.CHECK_CIRCLE
             notification_icon.current.color = COLOR_SUCCESS
             notification_text.current.color = COLOR_SUCCESS
         elif level == 'error':
-            notification_icon.current.name = ft.icons.ERROR
+            notification_icon.current.name = ft.Icons.ERROR
             notification_icon.current.color = COLOR_ERROR
             notification_text.current.color = COLOR_ERROR
         else:
@@ -415,7 +417,7 @@ def main(page: ft.Page):
                     if m:
                         pct = int(m.group(1))
                         msg = get_string('flashing_progress').format(pct=pct)
-                        page.run_thread_safe(
+                        page.run_thread(
                             lambda: notification_text.current.set_value(msg)
                         )
         
@@ -508,7 +510,7 @@ def main(page: ft.Page):
             sys.stderr = original_stderr
             captured_output = stream_logger.getvalue()
             all_logs.append(captured_output)
-            page.run_thread_safe(_erase_complete, return_code, "".join(all_logs))
+            page.run_thread(_erase_complete, return_code, "".join(all_logs))
             
     def _start_erase(e):
         port = port_dropdown.current.value
