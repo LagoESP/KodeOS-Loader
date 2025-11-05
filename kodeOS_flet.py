@@ -125,7 +125,40 @@ LANGUAGES = {
         'erase_confirm_message': "¡Esto BORRARÁ TODA LA FLASH del dispositivo!\nEsta acción no se puede deshacer.\n\n¿Está seguro?",
         'show_logs_label': "Mostrar Logs",
         'hide_logs_label': "Ocultar Logs"
+    },
+    # --- ADDED GERMAN ('de') ---
+    'de': {
+        'window_title': "kodeOS Lader",
+        'serial_port_label': "Serieller Port:",
+        'firmware_label': "Firmware (.bin):",
+        'flash_app_checkbox': "Kode OS App flashen (0x400000)",
+        'refresh_button': "Neu laden",
+        'browse_button': "Öffnen",
+        'load_button': "Flashen",
+        'load_button_loading': "Flashe...",
+        'erase_button': "Löschen",
+        'erase_button_erasing': "Lösche...",
+        'ports_loading': "Lade Ports...",
+        'no_ports_found': "Keine USB-Ports gefunden",
+        'select_port_prompt': "Wählen Sie Ihren USB-Port",
+        'browse_dialog_title': "Firmware .bin auswählen",
+        'status_ready': "Bereit zum Flashen",
+        'status_starting': "Starte Flash-Vorgang...",
+        'status_erasing': "Lösche Flash...",
+        'status_erasing_critical': "LÖSCHE FLASH... GERÄT NICHT TRENNEN!",
+        'flashing_progress': "Flashe ({pct}%)...",
+        'error_missing_params': "Seriellen Port und Firmware .bin-Datei auswählen.",
+        'error_missing_port': "Bitte einen seriellen Port auswählen.",
+        'flash_success': "Flash erfolgreich abgeschlossen.",
+        'flash_error_generic': "Fehler beim Flashen. Logs prüfen und erneut versuchen.",
+        'erase_success': "Flash erfolgreich gelöscht.",
+        'erase_error': "Fehler beim Löschen. Logs prüfen.",
+        'erase_confirm_title': "Löschen bestätigen",
+        'erase_confirm_message': "Dies LÖSCHT DEN GESAMTEN FLASH auf dem Gerät!\nDies kann nicht rückgängig gemacht werden.\n\nSind Sie sicher?",
+        'show_logs_label': "Logs anzeigen",
+        'hide_logs_label': "Logs ausblenden"
     }
+    # --------------------------
 }
 
 # ──────────────────────────  Main Application  ──────────────────────────
@@ -171,6 +204,7 @@ def main(page: ft.Page):
     log_view = ft.Ref[ft.ListView]()
     en_lang_button = ft.Ref[ft.Text]()
     es_lang_button = ft.Ref[ft.Text]()
+    de_lang_button = ft.Ref[ft.Text]() # <-- ADDED
     serial_label_text = ft.Ref[ft.Text]()
     firmware_label_text = ft.Ref[ft.Text]()
     
@@ -212,17 +246,28 @@ def main(page: ft.Page):
         return LANGUAGES.get(lang, LANGUAGES['en']).get(key, f"<{key}>")
 
     def _update_lang_switcher_ui():
+        # --- MODIFIED to be scalable ---
+        # Reset all
+        en_lang_button.current.weight = ft.FontWeight.NORMAL
+        en_lang_button.current.color = GRAY_MID
+        es_lang_button.current.weight = ft.FontWeight.NORMAL
+        es_lang_button.current.color = GRAY_MID
+        de_lang_button.current.weight = ft.FontWeight.NORMAL
+        de_lang_button.current.color = GRAY_MID
+
+        # Highlight active
         if lang == 'en':
             en_lang_button.current.weight = ft.FontWeight.BOLD
             en_lang_button.current.color = ACCENT
-            es_lang_button.current.weight = ft.FontWeight.NORMAL
-            es_lang_button.current.color = GRAY_MID
-        else:
-            en_lang_button.current.weight = ft.FontWeight.NORMAL
-            en_lang_button.current.color = GRAY_MID
+        elif lang == 'es':
             es_lang_button.current.weight = ft.FontWeight.BOLD
             es_lang_button.current.color = ACCENT
+        elif lang == 'de':
+            de_lang_button.current.weight = ft.FontWeight.BOLD
+            de_lang_button.current.color = ACCENT
+            
         page.update()
+        # -------------------------------
 
     def _update_ui_text():
         page.title = get_string('window_title')
@@ -700,6 +745,7 @@ def main(page: ft.Page):
                         ),
                         
                         # Language Switcher
+                        # --- MODIFIED to include 'de' ---
                         ft.Row(
                             [
                                 ft.Container(
@@ -713,10 +759,17 @@ def main(page: ft.Page):
                                     on_click=lambda e: _set_language(e, 'es'),
                                     padding=ft.padding.symmetric(horizontal=5)
                                 ),
+                                ft.Text("|", color=GRAY_MID), # <-- ADDED
+                                ft.Container( # <-- ADDED
+                                    content=ft.Text(ref=de_lang_button, value="Deutsch", style=body_style, data='de'),
+                                    on_click=lambda e: _set_language(e, 'de'),
+                                    padding=ft.padding.symmetric(horizontal=5)
+                                ),
                             ],
                             alignment=ft.MainAxisAlignment.END,
                             spacing=5
                         )
+                        # ---------------------------------
                     ],
                     expand=True,
                     spacing=5
