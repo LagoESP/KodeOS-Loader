@@ -36,7 +36,7 @@ To run the main application directly from the source code:
 
 1.  **Clone the repository:**
     ```sh
-    git clone [https://github.com/lagoesp/kodeos-loader.git](https://github.com/lagoesp/kodeos-loader.git)
+    git clone https://github.com/lagoesp/kodeos-loader.git
     cd kodeos-loader
     ```
 
