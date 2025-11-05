@@ -354,13 +354,13 @@ def main(page: ft.Page):
 
     def _update_log_area_safe(message):
         log_view.current.controls.append(
-            ft.Text(message, size=10, font_family="Monospace", selectable=True)
+            ft.Text(message, size=10, font_family="Monospace", selectable=True, color=TEXT_DARK)
         )
         if len(log_view.current.controls) > 0:
             log_view.current.update()
 
     def _update_log_area(message):
-        page.run_thread_safe(_update_log_area_safe, message)
+        page.run_thread(_update_log_area_safe, message)
 
     def _set_controls_disabled(disabled=True):
         """Disables or enables all interactive controls."""
@@ -436,7 +436,7 @@ def main(page: ft.Page):
             sys.stderr = original_stderr
             captured_output = stream_logger.getvalue()
             all_logs.append(captured_output)
-            page.run_thread_safe(_flash_complete, return_code, "".join(all_logs))
+            page.run_thread(_flash_complete, return_code, "".join(all_logs))
 
     def _start_flash(e):
         port = port_dropdown.current.value
