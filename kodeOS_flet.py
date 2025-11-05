@@ -11,7 +11,7 @@ import io
 import threading
 import pathlib
 import re
-import flet as ft # Flet en lugar de Tkinter
+import flet as ft
 from serial.tools import list_ports
 import esptool
 
@@ -21,12 +21,13 @@ try:
 except ImportError:
     PIL_AVAILABLE = False
 
-# --- OPTIMIZED FOR PILLOW > 10 ---
+# Regex to strip ANSI escape codes (for cleaning esptool output)
+ANSI_ESCAPE_REGEX = re.compile(r'\x1B\[[?0-9;]*[a-zA-Z]')
+
 if PIL_AVAILABLE:
     RESAMPLE_FILTER = Image.Resampling.LANCZOS
 else:
     RESAMPLE_FILTER = None
-# --- END OPTIMIZATION ---
 
 # --- Helper function for PyInstaller ---
 def resource_path(relative_path):
@@ -40,8 +41,8 @@ def resource_path(relative_path):
     
     return str(base_path / relative_path)
 
+# --- Constants ---
 BAUD_RATE = 460800
-# Original color palette with orange and gray
 WHITE = "#FFFFFF"
 BG = "#E1E1E1"
 ACCENT = "#FF7F1F"
@@ -52,18 +53,16 @@ GRAY_LIGHT = "#CCCCCC"
 GRAY_MID = "#888888"
 LOG_BG = "#F0F0F0"
 
-# Notification colors
 COLOR_SUCCESS = "#28A745"
 COLOR_ERROR = "#DC3545"
 COLOR_ERROR_HOVER = "#E4606D"
 COLOR_INFO = TEXT_DARK
 
-# Improved typography
 FONT_FAMILY = "Segoe UI"
 FONT_SIZE = 11
 FONT_SIZE_BOLD = 12
 
-# ──────────────────────────  Language Strings ──────────────────────────
+# --- Language Strings ---
 LANGUAGES = {
     'en': {
         'window_title': "kodeOS Loader",
@@ -78,12 +77,11 @@ LANGUAGES = {
         'erase_button_erasing': "Erasing...",
         'ports_loading': "Loading ports...",
         'no_ports_found': "No USB ports found",
-        'select_port_prompt': "Select your upload USB port", # New
+        'select_port_prompt': "Select your upload USB port",
         'browse_dialog_title': "Select firmware .bin",
         'status_ready': "Ready to flash",
         'status_starting': "Starting flash...",
         'status_erasing': "Erasing flash...",
-        # --- NUEVA LÍNEA ---
         'status_erasing_critical': "ERASING FLASH... DO NOT DISCONNECT THE DEVICE!",
         'flashing_progress': "Flashing ({pct}%)...",
         'error_missing_params': "Select serial port and firmware .bin file.",
@@ -110,12 +108,11 @@ LANGUAGES = {
         'erase_button_erasing': "Borrando...",
         'ports_loading': "Buscando puertos...",
         'no_ports_found': "No se encontraron puertos USB",
-        'select_port_prompt': "Seleccione su puerto USB", # New
+        'select_port_prompt': "Seleccione su puerto USB",
         'browse_dialog_title': "Seleccionar firmware .bin",
         'status_ready': "Listo para flashear",
         'status_starting': "Iniciando flasheo...",
         'status_erasing': "Borrando flash...",
-        # --- NUEVA LÍNEA ---
         'status_erasing_critical': "BORRANDO FLASH... ¡NO DESCONECTE EL DISPOSITIVO!",
         'flashing_progress': "Flasheando ({pct}%)...",
         'error_missing_params': "Seleccione un puerto serial y un archivo .bin.",
@@ -135,7 +132,7 @@ LANGUAGES = {
 
 def main(page: ft.Page):
     
-    # --- Configuración de la Página (Ventana) ---
+    # --- Page Setup ---
     page.title = LANGUAGES['en']['window_title']
     page.bgcolor = BG
     page.window_resizable = False
@@ -148,7 +145,6 @@ def main(page: ft.Page):
     
     INPUT_HEIGHT = 28
     
-    # --- Carga de Icono Multiplataforma ---
     try:
         icon_path = resource_path("icon.png") 
         if not pathlib.Path(icon_path).is_file():
@@ -157,13 +153,13 @@ def main(page: ft.Page):
     except Exception as e:
         print(f"Icon not found ({e}), using default.")
 
-    # --- Estado de la Aplicación ---
+    # --- App State ---
     lang = 'en'
     current_notification = None
 
-    # --- Referencias a Controles ---
+    # --- Control References ---
     port_dropdown = ft.Ref[ft.Dropdown]()
-    port_dropdown_container = ft.Ref[ft.Container]() # Contenedor para "destruir" el dropdown
+    port_dropdown_container = ft.Ref[ft.Container]()
     firmware_path = ft.Ref[ft.TextField]()
     flash_app_check = ft.Ref[ft.Checkbox]()
     load_btn = ft.Ref[ft.ElevatedButton]()
@@ -178,7 +174,39 @@ def main(page: ft.Page):
     serial_label_text = ft.Ref[ft.Text]()
     firmware_label_text = ft.Ref[ft.Text]()
     
-    # --- Lógica de la Aplicación (Funciones anidadas) ---
+    # --- Refactored Stream Logger ---
+    progress_regex = re.compile(r"\(\s*(\d{1,3})\s*%\s*\)")
+
+    class _StreamLogger(io.StringIO):
+        """
+        Custom stream logger to capture esptool output, clean ANSI codes,
+        and send it to the Flet log_view.
+        """
+        def __init__(self, handle_progress=False):
+            super().__init__()
+            self.handle_progress = handle_progress
+
+        def write(self, data):
+            super().write(data)
+            
+            # Handle progress bar update if enabled
+            if self.handle_progress:
+                m = progress_regex.search(data)
+                if m:
+                    pct = int(m.group(1))
+                    msg = get_string('flashing_progress').format(pct=pct)
+                    page.run_thread(
+                        lambda: notification_text.current.set_value(msg)
+                    )
+            
+            # Clean ANSI codes and update log view
+            cleaned_data = ANSI_ESCAPE_REGEX.sub('', data)
+            for part in cleaned_data.splitlines(True):
+                if part.strip():
+                    _update_log_area(part)
+
+
+    # --- App Logic (Nested Functions) ---
 
     def get_string(key):
         return LANGUAGES.get(lang, LANGUAGES['en']).get(key, f"<{key}>")
@@ -209,13 +237,10 @@ def main(page: ft.Page):
         if not erase_btn.current.disabled:
             erase_btn.current.text = get_string('erase_button')
         
-        # --- Diálogo eliminado ---
-
         _refresh_ports(update_text=True) 
         
         if current_notification:
             key, level = current_notification
-            # --- MODIFICACIÓN: No sobreescribir el mensaje de borrado ---
             if not key.startswith('flashing_progress') and not key.startswith('status_erasing'):
                 _show_notification(key, level)
         elif not load_btn.current.disabled:
@@ -224,7 +249,7 @@ def main(page: ft.Page):
         page.update()
 
     def _set_language(e, new_lang):
-        # --- FIX: Bloquear cambio de idioma durante flasheo ---
+        # Do not allow language change while busy
         if load_btn.current.disabled:
             return
             
@@ -244,51 +269,44 @@ def main(page: ft.Page):
         return usb_ports
 
     def _create_port_dropdown():
-        """Crea una nueva instancia de Dropdown para limpiar el estado."""
-        # El estilo de texto se define en body_style
+        """Creates a new Dropdown instance to clear its state."""
         body_style = ft.TextStyle(size=FONT_SIZE, font_family=FONT_FAMILY, color=TEXT_DARK)
         
         new_dd = ft.Dropdown(
-            ref=port_dropdown, # Asigna la ref al nuevo control
+            ref=port_dropdown,
             label_style=ft.TextStyle(size=FONT_SIZE, font_family=FONT_FAMILY, color=GRAY_MID),
             expand=True,
             border_color=GRAY_LIGHT,
             border_width=1.5,
             content_padding=10,
-            text_style=body_style, # <-- FIX: Color de texto aplicado
+            text_style=body_style,
         )
         return new_dd
 
     def _refresh_ports(e=None, update_text=False):
-        # --- FIX: Lógica de "Destruir y Rehacer" ---
-        
-        # 1. Guardar el valor antiguo (si existe) ANTES de destruir
+        # "Destroy and Recreate" logic for the dropdown
         old_value = port_dropdown.current.value if port_dropdown.current else None
         
-        # 2. Crear y asignar un Dropdown completamente nuevo
         new_dropdown = _create_port_dropdown()
         port_dropdown_container.current.content = new_dropdown
-        page.update() # Forzar redibujo inmediato
+        page.update() 
 
-        # 3. Rellenar el nuevo dropdown
         ports = _list_ports()
         
         if ports:
-            new_dropdown.options.clear() # Limpiar (aunque es new, por si acaso)
+            new_dropdown.options.clear()
             for p in ports:
                 new_dropdown.options.append(ft.dropdown.Option(p))
             
-            # Comprobar si el valor antiguo sigue siendo válido
             if old_value in ports and not update_text:
-                new_dropdown.value = old_value # Restaurar valor
+                new_dropdown.value = old_value
                 new_dropdown.label = None
             else:
-                new_dropdown.value = None # No seleccionar nada
+                new_dropdown.value = None
                 new_dropdown.label = get_string('select_port_prompt')
             
             new_dropdown.disabled = False
         else:
-            # No hay puertos
             new_dropdown.value = None
             new_dropdown.label = get_string('no_ports_found')
             new_dropdown.disabled = True
@@ -315,12 +333,10 @@ def main(page: ft.Page):
         notification_icon.current.color = None
         
         if level == 'success':
-            # --- FIX: Usar ft.Icons con 'I' mayúscula ---
             notification_icon.current.name = ft.Icons.CHECK_CIRCLE
             notification_icon.current.color = COLOR_SUCCESS
             notification_text.current.color = COLOR_SUCCESS
         elif level == 'error':
-            # --- FIX: Usar ft.Icons con 'I' mayúscula ---
             notification_icon.current.name = ft.Icons.ERROR
             notification_icon.current.color = COLOR_ERROR
             notification_text.current.color = COLOR_ERROR
@@ -342,7 +358,6 @@ def main(page: ft.Page):
             log_view.current.update()
 
     def _update_log_area(message):
-        # --- A PETICIÓN: Se mantiene page.run_thread ---
         page.run_thread(_update_log_area_safe, message)
 
     def _set_controls_disabled(disabled=True):
@@ -354,16 +369,15 @@ def main(page: ft.Page):
         firmware_path.current.disabled = disabled
         flash_app_check.current.disabled = disabled
         
-        # --- FIX: Lógica de habilitación/deshabilitación del dropdown ---
         if disabled:
             port_dropdown.current.disabled = True
         else:
-            # Al habilitar, solo habilitar si hay opciones en la lista
+            # On re-enable, only enable if there are options
             port_dropdown.current.disabled = (len(port_dropdown.current.options) == 0)
 
         page.update()
 
-    # --- Logica de Flasheo y Borrado ---
+    # --- Flashing & Erase Logic ---
 
     def _flash_thread(bin_file, port, is_app_flash):
         base_args = ["--chip", "esp32s3",
@@ -381,27 +395,11 @@ def main(page: ft.Page):
             
         args = base_args + flash_args
         
-        all_logs = []
         return_code = 1
         _update_log_area(f"Executing esptool.main with args: {args}\n")
 
-        regex = re.compile(r"\(\s*(\d{1,3})\s*%\s*\)")
-        
-        class _StreamLogger(io.StringIO):
-            def write(inner_self, data):
-                super(_StreamLogger, inner_self).write(data)
-                for part in data.splitlines(True):
-                    _update_log_area(part)
-                    m = regex.search(part)
-                    if m:
-                        pct = int(m.group(1))
-                        msg = get_string('flashing_progress').format(pct=pct)
-                        # --- A PETICIÓN: Se mantiene page.run_thread ---
-                        page.run_thread(
-                            lambda: notification_text.current.set_value(msg)
-                        )
-        
-        stream_logger = _StreamLogger()
+        # Redirect stdout/stderr to our custom logger
+        stream_logger = _StreamLogger(handle_progress=True)
         original_stdout = sys.stdout
         original_stderr = sys.stderr
         sys.stdout = stream_logger
@@ -416,12 +414,11 @@ def main(page: ft.Page):
             _update_log_area(f"\nException during esptool.main: {e}\n")
             return_code = 1
         finally:
+            # Restore stdout/stderr
             sys.stdout = original_stdout
             sys.stderr = original_stderr
             captured_output = stream_logger.getvalue()
-            all_logs.append(captured_output)
-            # --- A PETICIÓN: Se mantiene page.run_thread ---
-            page.run_thread(_flash_complete, return_code, "".join(all_logs))
+            page.run_thread(_flash_complete, return_code, captured_output)
 
     def _start_flash(e):
         port = port_dropdown.current.value
@@ -446,15 +443,13 @@ def main(page: ft.Page):
     def _flash_complete(rc, logs):
         _set_controls_disabled(False)
         load_btn.current.text = get_string('load_button')
-        _refresh_ports() # <-- FIX: Refrescar estado del puerto al finalizar
+        _refresh_ports()
         if rc == 0:
             _show_notification('flash_success', 'success')
             _update_log_area(f"\n{get_string('flash_success')}!\n")
         else:
             _show_notification('flash_error_generic', 'error')
             _update_log_area(f"\nError during flash (Return Code: {rc}). See details above.\n")
-
-    # --- Lógica de Borrado ---
     
     def _erase_thread(port):
         args = ["--chip", "esp32s3",
@@ -462,17 +457,11 @@ def main(page: ft.Page):
                 "--baud", str(BAUD_RATE),
                 "erase_flash"]
         
-        all_logs = []
         return_code = 1
         _update_log_area(f"Executing esptool.main with args: {args}\n")
 
-        class _StreamLogger(io.StringIO):
-            def write(inner_self, data):
-                super(_StreamLogger, inner_self).write(data)
-                for part in data.splitlines(True):
-                    _update_log_area(part)
-        
-        stream_logger = _StreamLogger()
+        # Redirect stdout/stderr to our custom logger
+        stream_logger = _StreamLogger(handle_progress=False)
         original_stdout = sys.stdout
         original_stderr = sys.stderr
         sys.stdout = stream_logger
@@ -487,35 +476,31 @@ def main(page: ft.Page):
             _update_log_area(f"\nException during esptool.main: {e}\n")
             return_code = 1
         finally:
+            # Restore stdout/stderr
             sys.stdout = original_stdout
             sys.stderr = original_stderr
             captured_output = stream_logger.getvalue()
-            all_logs.append(captured_output)
-            # --- A PETICIÓN: Se mantiene page.run_thread ---
-            page.run_thread(_erase_complete, return_code, "".join(all_logs))
+            page.run_thread(_erase_complete, return_code, captured_output)
             
     def _start_erase(e):
-        # --- FIX: Eliminado popup de confirmación ---
         port = port_dropdown.current.value
         if not port:
             _show_notification('error_missing_port', 'error')
             return
 
-        # Proceder directamente al borrado
+        # Proceed directly to erase
         _clear_log_area()
         _set_controls_disabled(True)
         erase_btn.current.text = get_string('erase_button_erasing')
-        # --- MODIFICACIÓN: Mostrar mensaje crítico en rojo ---
         _show_notification('status_erasing_critical', 'error')
         
         threading.Thread(target=_erase_thread, args=(port,), daemon=True).start()
-        # --- FIN DEL FIX ---
 
     def _erase_complete(rc, logs):
         _set_controls_disabled(False)
         load_btn.current.text = get_string('load_button')
         erase_btn.current.text = get_string('erase_button')
-        _refresh_ports() # <-- FIX: Refrescar estado del puerto al finalizar
+        _refresh_ports()
         
         if rc == 0:
             _show_notification('erase_success', 'success')
@@ -528,7 +513,7 @@ def main(page: ft.Page):
     file_picker = ft.FilePicker(on_result=_on_file_picked)
     page.overlay.append(file_picker)
 
-    # --- Creación del Layout de la UI ---
+    # --- UI Layout ---
     
     button_style_small = ft.ButtonStyle(
         bgcolor={
@@ -568,15 +553,13 @@ def main(page: ft.Page):
         overlay_color=COLOR_ERROR_HOVER,
     )
     
-    # Estilos de texto
     label_style = ft.TextStyle(weight=ft.FontWeight.BOLD, size=FONT_SIZE_BOLD, font_family=FONT_FAMILY, color=TEXT_DARK)
     body_style = ft.TextStyle(size=FONT_SIZE, font_family=FONT_FAMILY, color=TEXT_DARK)
     
-    # --- Construir la página ---
     page.add(
         ft.Row(
             [
-                # --- Columna Izquierda (Logo/Pet) ---
+                # --- Left Column (Logo/Pet) ---
                 ft.Container(
                     content=ft.Column(
                         [
@@ -598,17 +581,16 @@ def main(page: ft.Page):
                     width=160 
                 ),
                 
-                # --- Columna Derecha (Controles) ---
+                # --- Right Column (Controls) ---
                 ft.Column(
                     [
-                        # --- Fila Serial Port ---
+                        # Serial Port Row
                         ft.Row(
                             [
                                 ft.Text(ref=serial_label_text, value=get_string('serial_port_label'), style=label_style, width=110, text_align=ft.TextAlign.RIGHT),
-                                # --- FIX: Contenedor para "destruir y rehacer" el dropdown ---
                                 ft.Container(
                                     ref=port_dropdown_container,
-                                    content=_create_port_dropdown(), # Crear la instancia inicial
+                                    content=_create_port_dropdown(),
                                     expand=True
                                 ),
                                 ft.ElevatedButton(
@@ -624,7 +606,7 @@ def main(page: ft.Page):
                             spacing=5
                         ),
                         
-                        # --- Fila Firmware ---
+                        # Firmware Row
                         ft.Row(
                             [
                                 ft.Text(ref=firmware_label_text, value=get_string('firmware_label'), style=label_style, width=110, text_align=ft.TextAlign.RIGHT),
@@ -636,7 +618,7 @@ def main(page: ft.Page):
                                     border_color=GRAY_LIGHT,
                                     text_size=FONT_SIZE,
                                     content_padding=10,
-                                    text_style=body_style, # <-- FIX: Color aplicado
+                                    text_style=body_style,
                                 ),
                                 ft.ElevatedButton(
                                     ref=browse_btn,
@@ -651,11 +633,11 @@ def main(page: ft.Page):
                             spacing=5
                         ),
                         
-                        # --- Checkbox ---
+                        # Checkbox
                         ft.Checkbox(
                             ref=flash_app_check,
                             label=get_string('flash_app_checkbox'),
-                            label_style=ft.TextStyle( # <-- FIX: Color de texto añadido
+                            label_style=ft.TextStyle(
                                 size=FONT_SIZE, 
                                 font_family=FONT_FAMILY, 
                                 weight=ft.FontWeight.NORMAL, 
@@ -665,7 +647,7 @@ def main(page: ft.Page):
                             fill_color=WHITE,
                         ),
                         
-                        # --- Botones Flash/Erase ---
+                        # Flash/Erase Buttons
                         ft.Row(
                             [
                                 ft.ElevatedButton(
@@ -689,7 +671,7 @@ def main(page: ft.Page):
                             spacing=10
                         ),
                         
-                        # --- Notificación ---
+                        # Notification Bar
                         ft.Row(
                             [
                                 ft.Icon(ref=notification_icon, size=18, color=COLOR_INFO),
@@ -702,7 +684,7 @@ def main(page: ft.Page):
                             height=30
                         ),
                         
-                        # --- Área de Log ---
+                        # Log Area
                         ft.Container(
                             content=ft.ListView(
                                 ref=log_view,
@@ -717,7 +699,7 @@ def main(page: ft.Page):
                             bgcolor=LOG_BG
                         ),
                         
-                        # --- Selector de Idioma ---
+                        # Language Switcher
                         ft.Row(
                             [
                                 ft.Container(
@@ -745,12 +727,12 @@ def main(page: ft.Page):
         )
     )
     
-    # --- Carga Inicial ---
+    # --- Initial Load ---
     page.update()
     _refresh_ports()
     _update_lang_switcher_ui()
 
-# --- Ejecutar la App ---
+# --- Run App ---
 if __name__ == "__main__":
     ft.app(
         target=main, 
