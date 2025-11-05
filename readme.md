@@ -74,7 +74,7 @@ This process uses `flet pack` and requires a **specifically named virtual enviro
 
 1.  **Clone the repository** (if not already done):
     ```sh
-    git clone [https://github.com/lagoesp/kodeos-loader.git](https://github.com/lagoesp/kodeos-loader.git)
+    git clone https://github.com/lagoesp/kodeos-loader.git
     cd kodeos-loader
     ```
 
