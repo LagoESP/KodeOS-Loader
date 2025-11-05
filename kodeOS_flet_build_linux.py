@@ -82,9 +82,7 @@ def main():
     # --- 4. Create 'control' file (Package Metadata) ---
     print("--- 4. Creating 'control' file ---")
     
-    # --- *** ESTA ES LA LÍNEA MODIFICADA *** ---
-    # Acepta la nueva versión (4.1-0) O la versión antigua (4.0-37)
-    # Esto hace que el paquete sea compatible con Ubuntu 22.04+ Y 24.04+
+    # Flet dependencies for Ubuntu 22.04 (old) AND 24.04+ (new)
     flet_depends = "libwebkit2gtk-4.1-0 | libwebkit2gtk-4.0-37, libgstreamer1.0-0, libgstreamer-plugins-base1.0-0"
     
     control_content = f"""Package: {PKG_NAME_LOWER}
@@ -107,6 +105,7 @@ Icon={APP_NAME}
 Terminal=false
 Type=Application
 Categories=Utility;Development;
+StartupWMClass=flet
 """
     (PKG_DIR / f"usr/share/applications/{APP_NAME}.desktop").write_text(desktop_content, encoding="utf-8")
 
