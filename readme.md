@@ -25,7 +25,7 @@ This tool provides a simple, clean interface for `esptool`, allowing you to flas
 
 This repository contains two versions of the loader:
 
-* **`kodeOS_flet.py` (Recommended):** The main, supported application built with **Flet**. This version is used for all official builds and includes multi-language support and a modern UI.
+* **`kodeOS_flet.py` (Recommended):** The main, supported application built with **Flet**. This version is used for all official builds.
 * **`kodeOS.py` (Legacy):** An older, stable alpha version built with **Tkinter**. This version is no longer actively developed or supported but remains functional.
 
 ---
@@ -36,14 +36,20 @@ To run the main application directly from the source code:
 
 1.  **Clone the repository:**
     ```sh
-    git clone https://github.com/lagoesp/kodeos-loader.git
+    git clone [https://github.com/lagoesp/kodeos-loader.git](https://github.com/lagoesp/kodeos-loader.git)
     cd kodeos-loader
     ```
 
 2.  **Create a virtual environment (Recommended):**
+    *We recommend using the name `KodeOS-Loader` as it's required for the build scripts.*
     ```sh
-    python3 -m venv venv
-    source venv/bin/activate  # On Windows: venv\Scripts\activate
+    # For Windows
+    python -m venv KodeOS-Loader
+    .\KodeOS-Loader\Scripts\activate
+    
+    # For Linux/macOS
+    python3 -m venv KodeOS-Loader
+    source KodeOS-Loader/bin/activate
     ```
 
 3.  **Install the required packages:**
@@ -58,33 +64,58 @@ To run the main application directly from the source code:
 
 ---
 
-## How to Build the Executable
+## How to Build from Source (For Developers)
 
 This project is configured to be built into distributable packages for each OS.
+
+### Build for Windows (Portable .exe)
+
+This process uses `flet pack` and requires a **specifically named virtual environment** (`KodeOS-Loader`) to correctly find and bundle the `esptool` dependencies.
+
+1.  **Clone the repository** (if not already done):
+    ```sh
+    git clone [https://github.com/lagoesp/kodeos-loader.git](https://github.com/lagoesp/kodeos-loader.git)
+    cd kodeos-loader
+    ```
+
+2.  **Create a venv NAMED `KodeOS-Loader`:**
+    *This name is **required** for the build script to find dependencies.*
+    ```sh
+    python -m venv KodeOS-Loader
+    ```
+
+3.  **Activate the venv and install dependencies:**
+    ```sh
+    .\KodeOS-Loader\Scripts\activate
+    pip install -r requirements.txt
+    ```
+
+4.  **Run the build script:**
+    This Python script automates the `flet pack` command with all the correct flags.
+    ```sh
+    python kodeOS_flet_build_windows.py
+    ```
+
+5.  **Get your package:**
+    Your final portable `.exe` will be in the `release/` folder (e.g., `release/kodeOS-Loader-v1.0.0-Portable.exe`).
 
 ### Build for Linux (Ubuntu/Debian)
 
 This process creates a `.deb` package that will install the app, add it to the application menu, and set the correct icon.
 
 1.  **Install build tools:**
-    You need PyInstaller and the Debian packaging tools.
     ```sh
     pip install pyinstaller
     sudo apt-get install dpkg-dev
     ```
 
 2.  **Run the build script:**
-    The `kodeOS_flet_build_linux.py` script automates the entire process.
     ```sh
     python3 kodeOS_flet_build_linux.py
     ```
 
 3.  **Get your package:**
     Your final distributable file will be in the `release/` folder (e.g., `release/kodeos-loader_1.0.0-1_amd64.deb`).
-
-### Build for Windows (Placeholder)
-
-*(Instructions to be added. This will involve a `kodeOS_flet_build_windows.py` script that uses PyInstaller to create a standalone `.exe` installer.)*
 
 ### Build for macOS (Placeholder)
 
@@ -93,6 +124,12 @@ This process creates a `.deb` package that will install the app, add it to the a
 ---
 
 ## How to Install (For End-Users)
+
+### Windows
+
+1.  Download the `...-Portable.exe` file from the [GitHub Releases](https://github.com/lagoesp/kodeos-loader/releases) page.
+2.  Place the `.exe` file in any folder you like.
+3.  Double-click to run. It's a portable application, so no installation is needed.
 
 ### Linux (Ubuntu/Debian)
 
@@ -111,7 +148,7 @@ This process creates a `.deb` package that will install the app, add it to the a
 ---
 ## Legacy (Tkinter) Version
 
-To run the older, unsupported Tkinter version (`kodeOS.py`), you will need its specific dependencies:
+To run the older, unsupported Tkinter version (`kodeOS.py`), you will need its specific dependencies (note the **lack of `flet`**):
 
 ```sh
 pip install pyserial esptool Pillow
