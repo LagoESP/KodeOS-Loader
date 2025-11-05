@@ -8,7 +8,8 @@ from pathlib import Path
 # Edit these variables to match your project
 APP_NAME = "kodeOS-Loader"
 SCRIPT_FILE = "kodeOS_flet.py"
-ICON_FILE = "icon.ico" # Must be a .ico file for Windows
+# --- FIX: Point to the icon inside the images folder ---
+ICON_FILE = "images/icon.ico" # Must be a .ico file for Windows
 VERSION = "1.0.0"
 
 # --- -------------------------- ---
@@ -65,7 +66,7 @@ def main():
         "--onefile",      # Bundle everything into one .exe
         "--noconsole",    # This hides the terminal (critical for GUI apps)
         f"--name={APP_NAME}",
-        f"--icon={ICON_FILE}",
+        f"--icon={ICON_FILE}", # This now uses images/icon.ico
         "--collect-data=esptool",     # Bundle esptool's JSON stubs
         "--add-data=images;images", # Bundle images (use ';' on Windows)
         SCRIPT_FILE
